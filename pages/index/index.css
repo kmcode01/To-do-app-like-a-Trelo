@@ -1,7 +1,18 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap");
+
 :root {
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  color: #122024;
-  background: #f6fbff;
+  --bg: #f3f8f5;
+  --surface: #ffffff;
+  --surface-accent: #eef6f1;
+  --text: #162025;
+  --muted: #4d636b;
+  --border: #d4e2db;
+  --primary: #0d8a67;
+  --primary-hover: #0b7558;
+  --shadow: 0 22px 45px rgba(15, 59, 46, 0.1);
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  color: var(--text);
+  background: radial-gradient(circle at 20% 5%, #dff2e8 0%, transparent 45%), var(--bg);
 }
 
 * {
@@ -10,6 +21,7 @@
 
 body {
   margin: 0;
+  background: transparent;
 }
 
 .page-shell {
@@ -19,17 +31,138 @@ body {
 }
 
 .page-content {
-  width: min(900px, 92%);
+  width: min(1050px, 92%);
   margin: 0 auto;
-  padding: 2rem 0 3rem;
+  padding: 2.6rem 0 4rem;
 }
 
-.primary-link {
-  display: inline-block;
-  margin-top: 1rem;
+.hero {
+  background: linear-gradient(130deg, var(--surface) 0%, var(--surface-accent) 100%);
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  padding: clamp(1.5rem, 3vw, 2.8rem);
+  box-shadow: var(--shadow);
+}
+
+.eyebrow {
+  margin: 0 0 0.8rem;
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.88rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 0;
+  max-width: 16ch;
+  font-family: "Sora", "Manrope", sans-serif;
+  font-size: clamp(2rem, 3.9vw, 3.15rem);
+  line-height: 1.08;
+}
+
+.hero-description {
+  margin: 1rem 0 0;
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: 1.03rem;
+  line-height: 1.7;
+}
+
+.hero-actions {
+  margin-top: 1.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 130px;
+  padding: 0.72rem 1.1rem;
+  border-radius: 0.75rem;
+  font-weight: 700;
   text-decoration: none;
-  color: #ffffff;
-  background: #1f7ae0;
-  padding: 0.6rem 1rem;
-  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  transition: transform 140ms ease, background-color 140ms ease, color 140ms ease,
+    border-color 140ms ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+}
+
+.btn-secondary {
+  color: var(--text);
+  background: #ffffff;
+  border-color: var(--border);
+}
+
+.btn-secondary:hover {
+  background: #f5fbf8;
+}
+
+.benefits {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.benefit-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1.15rem;
+}
+
+.benefit-card h2 {
+  margin: 0;
+  font-size: 1.04rem;
+}
+
+.benefit-card p {
+  margin: 0.56rem 0 0;
+  color: var(--muted);
+  line-height: 1.58;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 900px) {
+  .benefits {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .page-content {
+    padding-top: 1.4rem;
+  }
+
+  .hero {
+    border-radius: 1rem;
+  }
+
+  .hero h1 {
+    max-width: 100%;
+  }
+
+  .btn {
+    width: 100%;
+  }
+
+  .benefits {
+    grid-template-columns: 1fr;
+  }
 }

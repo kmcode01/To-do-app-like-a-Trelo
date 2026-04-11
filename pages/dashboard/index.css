@@ -24,6 +24,92 @@ body {
   padding: 2rem 0 3rem;
 }
 
+.summary-grid {
+  margin-top: 1.25rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.75rem;
+}
+
+.summary-card {
+  border: 1px solid #cfe0ea;
+  background: #ffffff;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.summary-label {
+  margin: 0;
+  color: #4a6670;
+  font-size: 0.92rem;
+}
+
+.summary-value {
+  margin: 0.35rem 0 0;
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: #13333c;
+}
+
+.projects-section {
+  margin-top: 1.6rem;
+}
+
+.projects-heading-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.projects-heading-row h2 {
+  margin: 0;
+}
+
+.projects-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.9rem 0 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.project-card,
+.empty-projects {
+  border: 1px solid #d6e4ec;
+  border-radius: 0.75rem;
+  background: #ffffff;
+  padding: 0.95rem 1rem;
+}
+
+.project-card h3 {
+  margin: 0;
+  color: #183941;
+}
+
+.project-description {
+  margin: 0.45rem 0 0;
+  color: #35505a;
+}
+
+.project-description.is-muted,
+.empty-projects {
+  color: #5a7680;
+}
+
+.project-link {
+  display: inline-block;
+  margin-top: 0.7rem;
+  text-decoration: none;
+  color: #1f7ae0;
+  font-weight: 600;
+}
+
+.project-link:hover {
+  text-decoration: underline;
+}
+
 .secondary-link {
   display: inline-block;
   margin-top: 1rem;
@@ -32,4 +118,37 @@ body {
   border: 1px solid #1f7ae0;
   padding: 0.6rem 1rem;
   border-radius: 0.5rem;
+}
+
+.actions-row {
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.actions-row .secondary-link {
+  margin-top: 0;
+}
+
+.danger-btn {
+  border: 1px solid #ba3350;
+  background: #ffffff;
+  color: #ba3350;
+  border-radius: 0.5rem;
+  padding: 0.6rem 1rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.danger-btn:disabled {
+  opacity: 0.8;
+  cursor: wait;
+}
+
+@media (max-width: 640px) {
+  .summary-value {
+    font-size: 1.4rem;
+  }
 }

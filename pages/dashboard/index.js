@@ -1,25 +1,161 @@
 import { renderFooter } from "../../components/footer/footer.js";
 import { renderHeader } from "../../components/header/header.js";
+import { requireAuthenticatedSession, supabase } from "../lib/supabaseClient.js";
 import "./index.css";
 
 document.title = "TaskFlow | Dashboard";
 
 const app = document.querySelector("#app");
 
-app.innerHTML = `
-  <div class="page-shell">
-    <div data-header></div>
-    <main class="page-content">
-      <h1>Dashboard</h1>
-      <p>
-        This page is mapped to <strong>/dashboard</strong> and can host board summaries,
-        project links, and quick actions.
-      </p>
-      <a class="secondary-link" href="/">Back to Home</a>
-    </main>
-    <div data-footer></div>
-  </div>
-`;
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
-renderHeader(document.querySelector("[data-header]"), "/dashboard");
-renderFooter(document.querySelector("[data-footer]"));
+async function fetchOwnedProjects(userId) {
+  const { data, error } = await supabase
+    .from("projects")
+    .select("id, title, description, created_at")
+    .eq("owner_user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? [];
+}
+
+async function fetchTaskStats(projectIds) {
+  if (!projectIds.length) {
+    return {
+      total: 0,
+      pending: 0,
+      done: 0
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("done")
+    .in("project_id", projectIds);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const tasks = data ?? [];
+  const done = tasks.filter((task) => task.done).length;
+
+  return {
+    total: tasks.length,
+    pending: tasks.length - done,
+    done
+  };
+}
+
+async function bootstrap() {
+  const session = await requireAuthenticatedSession("/login");
+
+  if (!session) {
+    return;
+  }
+
+  const userId = session.user?.id;
+
+  if (!userId) {
+    throw new Error("Could not resolve the current user.");
+  }
+
+  const projects = await fetchOwnedProjects(userId);
+  const projectIds = projects.map((project) => project.id);
+  const taskStats = await fetchTaskStats(projectIds);
+
+  const email = session.user?.email ?? "your account";
+  const projectCards =
+    projects.length > 0
+      ? projects
+          .map((project) => {
+            const title = escapeHtml(project.title || "Untitled project");
+            const description = project.description
+              ? `<p class="project-description">${escapeHtml(project.description)}</p>`
+              : '<p class="project-description is-muted">No description yet.</p>';
+
+            return `
+              <li class="project-card">
+                <h3>${title}</h3>
+                ${description}
+                <a class="project-link" href="/projects/${project.id}">Open /projects/${project.id}</a>
+              </li>
+            `;
+          })
+          .join("")
+      : '<li class="empty-projects">No projects yet. Create your first project to start planning tasks.</li>';
+
+  app.innerHTML = `
+    <div class="page-shell">
+      <div data-header></div>
+      <main class="page-content">
+        <h1>Dashboard</h1>
+        <p>
+          Signed in as <strong>${email}</strong>.
+        </p>
+
+        <section class="summary-grid" aria-label="Dashboard summary">
+          <article class="summary-card">
+            <p class="summary-label">Total projects</p>
+            <p class="summary-value">${projects.length}</p>
+          </article>
+          <article class="summary-card">
+            <p class="summary-label">Total tasks</p>
+            <p class="summary-value">${taskStats.total}</p>
+          </article>
+          <article class="summary-card">
+            <p class="summary-label">Pending tasks</p>
+            <p class="summary-value">${taskStats.pending}</p>
+          </article>
+          <article class="summary-card">
+            <p class="summary-label">Done tasks</p>
+            <p class="summary-value">${taskStats.done}</p>
+          </article>
+        </section>
+
+        <section class="projects-section" aria-label="Projects list">
+          <div class="projects-heading-row">
+            <h2>Your projects</h2>
+            <a class="secondary-link" href="/projects">Go to Projects</a>
+          </div>
+          <ul class="projects-list">
+            ${projectCards}
+          </ul>
+        </section>
+
+        <div class="actions-row">
+          <a class="secondary-link" href="/">Back to Home</a>
+          <button type="button" class="danger-btn" data-logout-btn>Logout</button>
+        </div>
+      </main>
+      <div data-footer></div>
+    </div>
+  `;
+
+  renderHeader(document.querySelector("[data-header]"), "/dashboard");
+  renderFooter(document.querySelector("[data-footer]"));
+
+  const logoutButton = document.querySelector("[data-logout-btn]");
+  logoutButton.addEventListener("click", async () => {
+    logoutButton.disabled = true;
+    logoutButton.textContent = "Logging out...";
+
+    await supabase.auth.signOut();
+    window.location.replace("/login");
+  });
+}
+
+bootstrap().catch((error) => {
+  app.innerHTML = `<p style="padding: 1rem; color: #b62541;">${error.message}</p>`;
+});
