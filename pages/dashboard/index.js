@@ -1,6 +1,7 @@
 import { renderFooter } from "../../components/footer/footer.js";
 import { renderHeader } from "../../components/header/header.js";
 import { requireAuthenticatedSession, supabase } from "../lib/supabaseClient.js";
+import "../theme.css";
 import "./index.css";
 
 document.title = "TaskFlow | Dashboard";
@@ -14,6 +15,15 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function formatDate(value) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString();
 }
 
 async function fetchOwnedProjects(userId) {
@@ -35,13 +45,14 @@ async function fetchTaskStats(projectIds) {
     return {
       total: 0,
       pending: 0,
-      done: 0
+      done: 0,
+      byProjectId: {}
     };
   }
 
   const { data, error } = await supabase
     .from("tasks")
-    .select("done")
+    .select("project_id, done")
     .in("project_id", projectIds);
 
   if (error) {
@@ -50,11 +61,38 @@ async function fetchTaskStats(projectIds) {
 
   const tasks = data ?? [];
   const done = tasks.filter((task) => task.done).length;
+  const byProjectId = {};
+
+  projectIds.forEach((projectId) => {
+    byProjectId[projectId] = {
+      total: 0,
+      pending: 0,
+      done: 0
+    };
+  });
+
+  tasks.forEach((task) => {
+    if (!byProjectId[task.project_id]) {
+      byProjectId[task.project_id] = {
+        total: 0,
+        pending: 0,
+        done: 0
+      };
+    }
+
+    byProjectId[task.project_id].total += 1;
+    if (task.done) {
+      byProjectId[task.project_id].done += 1;
+    } else {
+      byProjectId[task.project_id].pending += 1;
+    }
+  });
 
   return {
     total: tasks.length,
     pending: tasks.length - done,
-    done
+    done,
+    byProjectId
   };
 }
 
@@ -84,12 +122,33 @@ async function bootstrap() {
             const description = project.description
               ? `<p class="project-description">${escapeHtml(project.description)}</p>`
               : '<p class="project-description is-muted">No description yet.</p>';
+            const projectStats = taskStats.byProjectId[project.id] ?? {
+              total: 0,
+              pending: 0,
+              done: 0
+            };
+            const previewId = `preview-${project.id}`;
 
             return `
               <li class="project-card">
                 <h3>${title}</h3>
                 ${description}
-                <a class="project-link" href="/projects/${project.id}">Open /projects/${project.id}</a>
+                <div class="project-actions-row">
+                  <a class="project-action-btn project-action-primary" href="/projects/view?id=${project.id}">View</a>
+                  <button
+                    type="button"
+                    class="project-action-btn project-action-secondary"
+                    data-preview-btn
+                    data-preview-target="${previewId}"
+                    aria-expanded="false"
+                  >
+                    Quick preview
+                  </button>
+                </div>
+                <div id="${previewId}" class="project-preview" hidden>
+                  <p><strong>Created:</strong> ${formatDate(project.created_at)}</p>
+                  <p><strong>Tasks:</strong> ${projectStats.total} total | ${projectStats.pending} pending | ${projectStats.done} done</p>
+                </div>
               </li>
             `;
           })
@@ -127,7 +186,7 @@ async function bootstrap() {
         <section class="projects-section" aria-label="Projects list">
           <div class="projects-heading-row">
             <h2>Your projects</h2>
-            <a class="secondary-link" href="/projects">Go to Projects</a>
+            <a class="secondary-link" href="/projects">Manage projects</a>
           </div>
           <ul class="projects-list">
             ${projectCards}
@@ -147,6 +206,31 @@ async function bootstrap() {
   renderFooter(document.querySelector("[data-footer]"));
 
   const logoutButton = document.querySelector("[data-logout-btn]");
+  document.querySelectorAll("[data-preview-btn]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const targetId = button.getAttribute("data-preview-target");
+      if (!targetId) {
+        return;
+      }
+
+      const previewEl = document.getElementById(targetId);
+      if (!previewEl) {
+        return;
+      }
+
+      const isHidden = previewEl.hasAttribute("hidden");
+      if (isHidden) {
+        previewEl.removeAttribute("hidden");
+        button.setAttribute("aria-expanded", "true");
+        button.textContent = "Hide preview";
+      } else {
+        previewEl.setAttribute("hidden", "");
+        button.setAttribute("aria-expanded", "false");
+        button.textContent = "Quick preview";
+      }
+    });
+  });
+
   logoutButton.addEventListener("click", async () => {
     logoutButton.disabled = true;
     logoutButton.textContent = "Logging out...";

@@ -6,9 +6,18 @@
     <title>TaskFlow | 404 Not Found</title>
     <style>
       :root {
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        color: #122024;
-        background: #f6fbff;
+        --bg: #f3f8f5;
+        --surface: #ffffff;
+        --surface-accent: #eef6f1;
+        --text: #162025;
+        --muted: #4d636b;
+        --border: #d4e2db;
+        --primary: #0d8a67;
+        --primary-hover: #0b7558;
+        --shadow: 0 22px 45px rgba(15, 59, 46, 0.1);
+        font-family: "Manrope", "Segoe UI", sans-serif;
+        color: var(--text);
+        background: radial-gradient(circle at 20% 5%, #dff2e8 0%, transparent 45%), var(--bg);
       }
 
       * {
@@ -17,6 +26,7 @@
 
       body {
         margin: 0;
+        background: transparent;
       }
 
       main {
@@ -28,32 +38,46 @@
 
       .card {
         width: min(620px, 100%);
-        background: #ffffff;
-        border: 1px solid #d7e7f0;
-        border-radius: 1rem;
-        padding: 1.5rem;
+        background: linear-gradient(140deg, var(--surface) 0%, var(--surface-accent) 100%);
+        border: 1px solid var(--border);
+        border-radius: 1.25rem;
+        padding: 1.9rem;
         text-align: center;
+        box-shadow: var(--shadow);
       }
 
       h1 {
         margin: 0;
-        font-size: clamp(1.7rem, 2.5vw, 2.2rem);
+        font-family: "Sora", "Manrope", sans-serif;
+        font-size: clamp(1.9rem, 2.8vw, 2.5rem);
       }
 
       p {
-        margin: 0.8rem 0 0;
-        color: #35505a;
+        margin: 0.9rem 0 0;
+        color: var(--muted);
+        font-size: 1.02rem;
       }
 
       a {
-        display: inline-block;
-        margin-top: 1rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 1.2rem;
         text-decoration: none;
-        color: #1f7ae0;
-        border: 1px solid #1f7ae0;
-        border-radius: 0.5rem;
-        padding: 0.6rem 1rem;
-        font-weight: 600;
+        color: #ffffff;
+        border: 1px solid var(--primary);
+        background: var(--primary);
+        border-radius: 0.75rem;
+        padding: 0.72rem 1.1rem;
+        font-weight: 700;
+        line-height: 1;
+        transition: transform 140ms ease, background-color 140ms ease, color 140ms ease,
+          border-color 140ms ease;
+      }
+
+      a:hover {
+        background: var(--primary-hover);
+        transform: translateY(-1px);
       }
     </style>
   </head>

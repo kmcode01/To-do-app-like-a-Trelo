@@ -1,5 +1,6 @@
 import { renderFooter } from "../../components/footer/footer.js";
 import { renderHeader } from "../../components/header/header.js";
+import "../theme.css";
 import "./index.css";
 
 document.title = "TaskFlow | Home";

@@ -15,12 +15,39 @@ function routeAliasPlugin() {
     "/register",
     "/register/",
     "/register/index.html",
+    "/projects",
+    "/projects/",
+    "/projects/index.html",
+    "/projects/add",
+    "/projects/add/",
+    "/projects/add/index.html",
+    "/projects/edit",
+    "/projects/edit/",
+    "/projects/edit/index.html",
+    "/projects/view",
+    "/projects/view/",
+    "/projects/view/index.html",
     "/404",
     "/404.html"
   ]);
 
   const isInternalViteRequest = (pathname) =>
     pathname.startsWith("/@") || pathname.startsWith("/__vite");
+
+  const getProjectDetailsId = (pathname) => {
+    const match = pathname.match(/^\/projects\/([^/]+)$/);
+
+    if (!match) {
+      return null;
+    }
+
+    const projectId = decodeURIComponent(match[1]);
+    if (["add", "edit", "view", "index.html"].includes(projectId)) {
+      return null;
+    }
+
+    return projectId;
+  };
 
   const notFoundPageHtml = readFileSync(resolve(__dirname, "404.html"), "utf-8");
 
@@ -37,6 +64,31 @@ function routeAliasPlugin() {
 
     if (pathname === "/register") {
       return { url: "/register/index.html", statusCode: null };
+    }
+
+    if (pathname === "/projects") {
+      return { url: "/projects/index.html", statusCode: null };
+    }
+
+    if (pathname === "/projects/add") {
+      return { url: "/projects/add/index.html", statusCode: null };
+    }
+
+    if (pathname === "/projects/edit") {
+      return { url: "/projects/edit/index.html", statusCode: null };
+    }
+
+    if (pathname === "/projects/view") {
+      return { url: "/projects/view/index.html", statusCode: null };
+    }
+
+    const projectId = getProjectDetailsId(pathname);
+    if (projectId) {
+      const querySuffix = search ? `&${search}` : "";
+      return {
+        url: `/projects/view/index.html?id=${encodeURIComponent(projectId)}${querySuffix}`,
+        statusCode: null
+      };
     }
 
     if (knownPaths.has(pathname) || pathname.includes(".") || isInternalViteRequest(pathname)) {
@@ -58,6 +110,7 @@ function routeAliasPlugin() {
 
             if (
               !knownPaths.has(pathname) &&
+              !getProjectDetailsId(pathname) &&
               !pathname.includes(".") &&
               !isInternalViteRequest(pathname)
             ) {
@@ -94,6 +147,7 @@ function routeAliasPlugin() {
 
             if (
               !knownPaths.has(pathname) &&
+              !getProjectDetailsId(pathname) &&
               !pathname.includes(".") &&
               !isInternalViteRequest(pathname)
             ) {
@@ -134,7 +188,11 @@ export default defineConfig({
         notFound: resolve(__dirname, "404.html"),
         dashboard: resolve(__dirname, "dashboard/index.html"),
         login: resolve(__dirname, "login/index.html"),
-        register: resolve(__dirname, "register/index.html")
+        register: resolve(__dirname, "register/index.html"),
+        projects: resolve(__dirname, "projects/index.html"),
+        projectsAdd: resolve(__dirname, "projects/add/index.html"),
+        projectsEdit: resolve(__dirname, "projects/edit/index.html"),
+        projectsView: resolve(__dirname, "projects/view/index.html")
       }
     }
   }

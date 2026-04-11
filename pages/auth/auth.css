@@ -1,30 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap");
-
-:root {
-  --bg: #eef4f2;
-  --surface: #ffffff;
-  --surface-soft: #f7fcf9;
-  --text: #162025;
-  --muted: #4f646c;
-  --border: #d4e2db;
-  --primary: #0d8a67;
-  --primary-hover: #0b7558;
-  --danger: #b62541;
-  --shadow: 0 24px 45px rgba(15, 59, 46, 0.1);
-  font-family: "Manrope", "Segoe UI", sans-serif;
-  color: var(--text);
-  background: radial-gradient(circle at 15% 3%, #dff2e8 0%, transparent 44%), var(--bg);
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  background: transparent;
-}
-
 .page-shell {
   min-height: 100vh;
   display: grid;
@@ -34,7 +7,7 @@ body {
 .page-content {
   width: min(1050px, 92%);
   margin: 0 auto;
-  padding: 2.2rem 0 4rem;
+  padding: 2.6rem 0 4rem;
 }
 
 .auth-grid {
@@ -57,7 +30,7 @@ body {
 
 .auth-info {
   padding: 1.6rem;
-  background: linear-gradient(145deg, var(--surface-soft), #f0faf6);
+  background: linear-gradient(145deg, var(--surface-soft), var(--surface-accent));
 }
 
 .auth-kicker {
@@ -95,7 +68,7 @@ body {
 .field label {
   font-size: 0.9rem;
   font-weight: 700;
-  color: #27434a;
+  color: var(--text);
 }
 
 .field input {
@@ -114,15 +87,20 @@ body {
 }
 
 .btn-primary {
-  border: none;
-  border-radius: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--primary);
+  border-radius: 0.75rem;
   background: var(--primary);
   color: #ffffff;
   font-weight: 700;
   font: inherit;
-  padding: 0.78rem 1rem;
+  line-height: 1;
+  padding: 0.72rem 1.1rem;
   cursor: pointer;
-  transition: background-color 120ms ease, transform 120ms ease;
+  transition: transform 140ms ease, background-color 140ms ease, color 140ms ease,
+    border-color 140ms ease;
 }
 
 .btn-primary:hover {
@@ -140,7 +118,7 @@ body {
   min-height: 1.25rem;
   margin: 0;
   font-size: 0.92rem;
-  color: #1e4854;
+  color: var(--muted);
 }
 
 .auth-message.is-error {
@@ -154,7 +132,7 @@ body {
 }
 
 .auth-switch a {
-  color: #136aaf;
+  color: var(--primary);
   text-decoration: none;
   font-weight: 700;
 }
@@ -178,7 +156,7 @@ body {
   border-radius: 0.75rem;
   background: rgba(255, 255, 255, 0.64);
   padding: 0.7rem;
-  color: #2a484f;
+  color: var(--text);
   line-height: 1.5;
 }
 

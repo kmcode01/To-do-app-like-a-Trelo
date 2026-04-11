@@ -1,17 +1,3 @@
-:root {
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  color: #122024;
-  background: #f6fbff;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-}
-
 .page-shell {
   min-height: 100vh;
   display: grid;
@@ -19,9 +5,9 @@ body {
 }
 
 .page-content {
-  width: min(900px, 92%);
+  width: min(1050px, 92%);
   margin: 0 auto;
-  padding: 2rem 0 3rem;
+  padding: 2.2rem 0 4rem;
 }
 
 .summary-grid {
@@ -32,15 +18,16 @@ body {
 }
 
 .summary-card {
-  border: 1px solid #cfe0ea;
-  background: #ffffff;
+  border: 1px solid var(--border);
+  background: var(--surface);
   border-radius: 0.75rem;
   padding: 1rem;
+  box-shadow: var(--shadow);
 }
 
 .summary-label {
   margin: 0;
-  color: #4a6670;
+  color: var(--muted);
   font-size: 0.92rem;
 }
 
@@ -48,7 +35,7 @@ body {
   margin: 0.35rem 0 0;
   font-size: 1.65rem;
   font-weight: 700;
-  color: #13333c;
+  color: var(--text);
 }
 
 .projects-section {
@@ -77,47 +64,118 @@ body {
 
 .project-card,
 .empty-projects {
-  border: 1px solid #d6e4ec;
+  border: 1px solid var(--border);
   border-radius: 0.75rem;
-  background: #ffffff;
+  background: var(--surface);
   padding: 0.95rem 1rem;
+  box-shadow: var(--shadow);
 }
 
 .project-card h3 {
   margin: 0;
-  color: #183941;
+  color: var(--text);
 }
 
 .project-description {
   margin: 0.45rem 0 0;
-  color: #35505a;
+  color: var(--muted);
 }
 
 .project-description.is-muted,
 .empty-projects {
-  color: #5a7680;
+  color: var(--muted);
 }
 
-.project-link {
-  display: inline-block;
+.project-actions-row {
   margin-top: 0.7rem;
-  text-decoration: none;
-  color: #1f7ae0;
-  font-weight: 600;
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.project-link:hover {
-  text-decoration: underline;
+.project-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  min-width: 130px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text);
+  border-radius: 0.75rem;
+  padding: 0.72rem 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 140ms ease, background-color 140ms ease, color 140ms ease,
+    border-color 140ms ease;
+}
+
+.project-action-btn:hover {
+  transform: translateY(-1px);
+}
+
+.project-action-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+
+.project-action-primary:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.project-action-secondary {
+  background: #ffffff;
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.project-action-secondary:hover {
+  background: #f5fbf8;
+}
+
+.project-preview {
+  margin-top: 0.65rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  background: var(--surface-accent);
+}
+
+.project-preview p {
+  margin: 0;
+  color: var(--text);
+}
+
+.project-preview p + p {
+  margin-top: 0.35rem;
 }
 
 .secondary-link {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 130px;
   margin-top: 1rem;
   text-decoration: none;
-  color: #1f7ae0;
-  border: 1px solid #1f7ae0;
-  padding: 0.6rem 1rem;
-  border-radius: 0.5rem;
+  color: var(--text);
+  border: 1px solid var(--border);
+  background: #ffffff;
+  padding: 0.72rem 1.1rem;
+  border-radius: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: transform 140ms ease, background-color 140ms ease, color 140ms ease,
+    border-color 140ms ease;
+}
+
+.secondary-link:hover {
+  transform: translateY(-1px);
+  background: #f5fbf8;
 }
 
 .actions-row {
@@ -133,13 +191,23 @@ body {
 }
 
 .danger-btn {
-  border: 1px solid #ba3350;
-  background: #ffffff;
-  color: #ba3350;
-  border-radius: 0.5rem;
-  padding: 0.6rem 1rem;
+  border: 1px solid #c33f5c;
+  background: var(--surface);
+  color: var(--danger);
+  border-radius: 0.75rem;
+  min-width: 130px;
+  padding: 0.72rem 1.1rem;
+  font-weight: 700;
+  line-height: 1;
   font: inherit;
   cursor: pointer;
+  transition: transform 140ms ease, background-color 140ms ease, color 140ms ease,
+    border-color 140ms ease;
+}
+
+.danger-btn:hover {
+  transform: translateY(-1px);
+  background: #fff4f6;
 }
 
 .danger-btn:disabled {
