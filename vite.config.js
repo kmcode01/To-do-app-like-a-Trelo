@@ -34,7 +34,12 @@ function routeAliasPlugin() {
   const isInternalViteRequest = (pathname) =>
     pathname.startsWith("/@") || pathname.startsWith("/__vite");
 
-  const getProjectDetailsId = (pathname) => {
+  const getProjectViewId = (pathname) => {
+    const singularMatch = pathname.match(/^\/project\/([^/]+)\/?$/);
+    if (singularMatch) {
+      return decodeURIComponent(singularMatch[1]);
+    }
+
     const match = pathname.match(/^\/projects\/([^/]+)$/);
 
     if (!match) {
@@ -47,6 +52,16 @@ function routeAliasPlugin() {
     }
 
     return projectId;
+  };
+
+  const getProjectEditId = (pathname) => {
+    const match = pathname.match(/^\/project\/([^/]+)\/edit\/?$/);
+
+    if (!match) {
+      return null;
+    }
+
+    return decodeURIComponent(match[1]);
   };
 
   const notFoundPageHtml = readFileSync(resolve(__dirname, "404.html"), "utf-8");
@@ -82,11 +97,20 @@ function routeAliasPlugin() {
       return { url: "/projects/view/index.html", statusCode: null };
     }
 
-    const projectId = getProjectDetailsId(pathname);
+    const projectId = getProjectViewId(pathname);
     if (projectId) {
       const querySuffix = search ? `&${search}` : "";
       return {
         url: `/projects/view/index.html?id=${encodeURIComponent(projectId)}${querySuffix}`,
+        statusCode: null
+      };
+    }
+
+    const projectEditId = getProjectEditId(pathname);
+    if (projectEditId) {
+      const querySuffix = search ? `&${search}` : "";
+      return {
+        url: `/projects/edit/index.html?id=${encodeURIComponent(projectEditId)}${querySuffix}`,
         statusCode: null
       };
     }
@@ -110,7 +134,8 @@ function routeAliasPlugin() {
 
             if (
               !knownPaths.has(pathname) &&
-              !getProjectDetailsId(pathname) &&
+              !getProjectViewId(pathname) &&
+              !getProjectEditId(pathname) &&
               !pathname.includes(".") &&
               !isInternalViteRequest(pathname)
             ) {
@@ -147,7 +172,8 @@ function routeAliasPlugin() {
 
             if (
               !knownPaths.has(pathname) &&
-              !getProjectDetailsId(pathname) &&
+              !getProjectViewId(pathname) &&
+              !getProjectEditId(pathname) &&
               !pathname.includes(".") &&
               !isInternalViteRequest(pathname)
             ) {

@@ -26,6 +26,16 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
 }
 
+function getProjectIdFromPath(pathname) {
+  const match = pathname.match(/^\/project\/([^/]+)\/?$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return decodeURIComponent(match[1]);
+}
+
 async function bootstrap() {
   const session = await requireAuthenticatedSession("/login");
 
@@ -34,7 +44,7 @@ async function bootstrap() {
   }
 
   const params = new URLSearchParams(window.location.search);
-  const projectId = params.get("id");
+  const projectId = getProjectIdFromPath(window.location.pathname) || params.get("id");
 
   if (!projectId) {
     throw new Error("Missing project id. Open this page from the Projects list.");
@@ -77,7 +87,7 @@ async function bootstrap() {
           </div>
 
           <div class="form-actions" style="margin-top: 1rem;">
-            <a class="action-link" href="/projects/edit?id=${project.id}">Edit</a>
+            <a class="action-link" href="/project/${project.id}/edit">Edit</a>
             <a class="action-link" href="/projects">Back to Projects</a>
           </div>
         </section>

@@ -17,6 +17,16 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function getProjectIdFromPath(pathname) {
+  const match = pathname.match(/^\/project\/([^/]+)\/edit\/?$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return decodeURIComponent(match[1]);
+}
+
 async function bootstrap() {
   const session = await requireAuthenticatedSession("/login");
 
@@ -30,7 +40,7 @@ async function bootstrap() {
   }
 
   const params = new URLSearchParams(window.location.search);
-  const projectId = params.get("id");
+  const projectId = getProjectIdFromPath(window.location.pathname) || params.get("id");
 
   if (!projectId) {
     throw new Error("Missing project id. Open this page from the Projects list.");
@@ -68,7 +78,7 @@ async function bootstrap() {
 
           <div class="form-actions">
             <button class="btn-primary" type="submit" data-submit-btn>Save</button>
-            <a class="action-link" href="/projects/view?id=${project.id}">View</a>
+            <a class="action-link" href="/project/${project.id}">View</a>
             <a class="action-link" href="/projects">Back to Projects</a>
           </div>
 

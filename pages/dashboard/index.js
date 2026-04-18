@@ -134,7 +134,7 @@ async function bootstrap() {
                 <h3>${title}</h3>
                 ${description}
                 <div class="project-actions-row">
-                  <a class="project-action-btn project-action-primary" href="/projects/view?id=${project.id}">View</a>
+                  <a class="project-action-btn project-action-primary" href="/project/${project.id}">View</a>
                   <button
                     type="button"
                     class="project-action-btn project-action-secondary"
