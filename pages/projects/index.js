@@ -50,6 +50,9 @@ function renderPage(projects, showCreatedNotice) {
                 <a class="icon-link" href="/project/${project.id}" aria-label="View project">
                   ${iconSvg("M12 5c5.5 0 9.6 4.1 10.8 6.4.3.4.3.8 0 1.2C21.6 14.9 17.5 19 12 19S2.4 14.9 1.2 12.6a1 1 0 0 1 0-1.2C2.4 9.1 6.5 5 12 5Zm0 2.2A4.8 4.8 0 1 0 12 17a4.8 4.8 0 0 0 0-9.8Zm0 2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6")}
                 </a>
+                <a class="icon-link" href="/project/${project.id}/taskboard" aria-label="Open taskboard">
+                  ${iconSvg("M4 6h14v2H4V6Zm0 5h14v2H4v-2Zm0 5h9v2H4v-2Z")}
+                </a>
                 <a class="icon-link" href="/project/${project.id}/edit" aria-label="Edit project">
                   ${iconSvg("M3 17.2V21h3.8l11-11.1-3.8-3.8L3 17.2Zm17.7-10.3a1 1 0 0 0 0-1.4l-2.2-2.2a1 1 0 0 0-1.4 0l-1.7 1.7 3.8 3.8 1.5-1.9Z")}
                 </a>

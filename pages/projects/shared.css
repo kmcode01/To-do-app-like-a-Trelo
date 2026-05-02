@@ -173,7 +173,8 @@
 }
 
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   font: inherit;
   width: 100%;
   border: 1px solid var(--border);

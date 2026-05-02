@@ -17,6 +17,10 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function stripHtml(value) {
+  return String(value || "").replace(/<[^>]*>/g, "");
+}
+
 function formatDate(value) {
   if (!value) {
     return "-";
@@ -26,11 +30,13 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString();
 }
 
-async function fetchOwnedProjects(userId) {
+async function fetchUserTasks(userId) {
   const { data, error } = await supabase
-    .from("projects")
-    .select("id, title, description, created_at")
-    .eq("owner_user_id", userId)
+    .from("tasks")
+    .select(
+      "id, title, description_html, created_at, done, status, priority, stage_id, project_id, projects(title), project_stages(name)"
+    )
+    .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -40,84 +46,30 @@ async function fetchOwnedProjects(userId) {
   return data ?? [];
 }
 
-async function fetchTaskStats(projectIds) {
-  if (!projectIds.length) {
-    return {
-      total: 0,
-      pending: 0,
-      done: 0,
-      byProjectId: {}
-    };
-  }
+function resolveTaskStatus(task) {
+  const stageName = String(task.project_stages?.name || "").toLowerCase();
+  const status = String(task.status || "").toLowerCase();
 
-  const { data, error } = await supabase
-    .from("tasks")
-    .select("project_id, done")
-    .in("project_id", projectIds);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const tasks = data ?? [];
-  const done = tasks.filter((task) => task.done).length;
-  const byProjectId = {};
-
-  projectIds.forEach((projectId) => {
-    byProjectId[projectId] = {
-      total: 0,
-      pending: 0,
-      done: 0
-    };
-  });
-
-  tasks.forEach((task) => {
-    if (!byProjectId[task.project_id]) {
-      byProjectId[task.project_id] = {
-        total: 0,
-        pending: 0,
-        done: 0
-      };
-    }
-
-    byProjectId[task.project_id].total += 1;
-    if (task.done) {
-      byProjectId[task.project_id].done += 1;
-    } else {
-      byProjectId[task.project_id].pending += 1;
-    }
-  });
-
-  return {
-    total: tasks.length,
-    pending: tasks.length - done,
-    done,
-    byProjectId
-  };
-}
-
-function resolveProjectStatus(projectStats) {
-  if (!projectStats.total) {
-    return "not_started";
-  }
-
-  if (projectStats.pending === 0) {
+  if (stageName.includes("done") || task.done || status === "done") {
     return "done";
   }
 
-  if (projectStats.done === 0) {
-    return "not_started";
+  if (stageName.includes("in progress") || status === "in_progress") {
+    return "in_progress";
   }
 
-  return "in_progress";
+  return "not_started";
 }
 
-function renderProjectCard(project, projectStats, statusKey) {
-  const title = escapeHtml(project.title || "Untitled project");
-  const description = project.description
-    ? `<p class="project-description">${escapeHtml(project.description)}</p>`
+function renderTaskCard(task, statusKey) {
+  const title = escapeHtml(task.title || "Untitled task");
+  const projectTitle = escapeHtml(task.projects?.title || "Project");
+  const stageName = escapeHtml(task.project_stages?.name || "Unassigned");
+  const priority = escapeHtml(task.priority || "medium");
+  const descriptionText = stripHtml(task.description_html || "");
+  const description = descriptionText
+    ? `<p class="project-description">${escapeHtml(descriptionText)}</p>`
     : '<p class="project-description is-muted">No description yet.</p>';
-  const previewId = `preview-${project.id}`;
   const statusLabel =
     statusKey === "done"
       ? "Done"
@@ -126,34 +78,26 @@ function renderProjectCard(project, projectStats, statusKey) {
         : "Not Started";
 
   return `
-    <li class="board-card" draggable="true" data-project-id="${project.id}" data-status="${statusKey}">
+    <li class="board-card" draggable="true" data-task-id="${task.id}" data-status="${statusKey}">
       <div class="board-card-body">
         <h3>${title}</h3>
         ${description}
       </div>
       <div class="board-card-meta">
         <span class="status-pill status-${statusKey}">${statusLabel}</span>
-        <span class="meta-text">${projectStats.total} tasks</span>
+        <span class="meta-text">${projectTitle}</span>
       </div>
       <div class="board-card-meta">
-        <span class="meta-text">${projectStats.pending} pending</span>
-        <span class="meta-text">Created ${formatDate(project.created_at)}</span>
+        <span class="meta-text">Stage: ${stageName}</span>
+        <span class="meta-text">Priority: ${priority}</span>
+      </div>
+      <div class="board-card-meta">
+        <span class="meta-text">Created ${formatDate(task.created_at)}</span>
+        <span class="meta-text">Task</span>
       </div>
       <div class="project-actions-row board-actions">
-        <a class="project-action-btn project-action-primary" href="/project/${project.id}">View</a>
-        <button
-          type="button"
-          class="project-action-btn project-action-secondary"
-          data-preview-btn
-          data-preview-target="${previewId}"
-          aria-expanded="false"
-        >
-          Quick preview
-        </button>
-      </div>
-      <div id="${previewId}" class="project-preview" hidden>
-        <p><strong>Created:</strong> ${formatDate(project.created_at)}</p>
-        <p><strong>Tasks:</strong> ${projectStats.total} total | ${projectStats.pending} pending | ${projectStats.done} done</p>
+        <a class="project-action-btn project-action-primary" href="/project/${task.project_id}">Open project</a>
+        <a class="project-action-btn project-action-secondary" href="/project/${task.project_id}/taskboard">Taskboard</a>
       </div>
     </li>
   `;
@@ -279,7 +223,7 @@ function setupBoardDragAndDrop() {
       column.classList.remove("is-drop-target");
     });
 
-    column.addEventListener("drop", () => {
+    column.addEventListener("drop", async () => {
       const list = column.querySelector(".board-card-list");
       const draggingCard = document.querySelector(".board-card.is-dragging");
       if (!list || !draggingCard) {
@@ -298,9 +242,28 @@ function setupBoardDragAndDrop() {
 
       column.classList.remove("is-drop-target");
       updateColumnCounts();
+
+      const taskId = draggingCard.dataset.taskId;
+      if (!taskId || !statusKey) {
+        return;
+      }
+
+      const doneFlag = statusKey === "done";
+      const statusValue = doneFlag ? "done" : "todo";
+
+      const { error } = await supabase
+        .from("tasks")
+        .update({ done: doneFlag, status: statusValue })
+        .eq("id", taskId);
+
+      if (error) {
+        console.error(error);
+      }
     });
   });
 }
+
+
 
 async function bootstrap() {
   const session = await requireAuthenticatedSession("/login");
@@ -315,9 +278,7 @@ async function bootstrap() {
     throw new Error("Could not resolve the current user.");
   }
 
-  const projects = await fetchOwnedProjects(userId);
-  const projectIds = projects.map((project) => project.id);
-  const taskStats = await fetchTaskStats(projectIds);
+  const tasks = await fetchUserTasks(userId);
 
   const email = session.user?.email ?? "your account";
   const boardColumns = {
@@ -326,14 +287,9 @@ async function bootstrap() {
     done: []
   };
 
-  projects.forEach((project) => {
-    const projectStats = taskStats.byProjectId[project.id] ?? {
-      total: 0,
-      pending: 0,
-      done: 0
-    };
-    const statusKey = resolveProjectStatus(projectStats);
-    boardColumns[statusKey].push(renderProjectCard(project, projectStats, statusKey));
+  tasks.forEach((task) => {
+    const statusKey = resolveTaskStatus(task);
+    boardColumns[statusKey].push(renderTaskCard(task, statusKey));
   });
 
   const columnCounts = {
@@ -342,9 +298,16 @@ async function bootstrap() {
     done: boardColumns.done.length
   };
 
-  if (projects.length === 0) {
+  const stats = {
+    total: tasks.length,
+    notStarted: boardColumns.not_started.length,
+    inProgress: boardColumns.in_progress.length,
+    done: boardColumns.done.length
+  };
+
+  if (tasks.length === 0) {
     boardColumns.not_started.push(
-      '<li class="empty-projects">No projects yet. Create your first project to start planning tasks.</li>'
+      '<li class="empty-projects">No tasks yet. Create one in your taskboard.</li>'
     );
   }
 
@@ -359,27 +322,27 @@ async function bootstrap() {
 
         <section class="summary-grid" aria-label="Dashboard summary">
           <article class="summary-card">
-            <p class="summary-label">Total projects</p>
-            <p class="summary-value">${projects.length}</p>
-          </article>
-          <article class="summary-card">
             <p class="summary-label">Total tasks</p>
-            <p class="summary-value">${taskStats.total}</p>
+            <p class="summary-value">${stats.total}</p>
           </article>
           <article class="summary-card">
-            <p class="summary-label">Pending tasks</p>
-            <p class="summary-value">${taskStats.pending}</p>
+            <p class="summary-label">Not started</p>
+            <p class="summary-value">${stats.notStarted}</p>
           </article>
           <article class="summary-card">
-            <p class="summary-label">Done tasks</p>
-            <p class="summary-value">${taskStats.done}</p>
+            <p class="summary-label">In progress</p>
+            <p class="summary-value">${stats.inProgress}</p>
+          </article>
+          <article class="summary-card">
+            <p class="summary-label">Done</p>
+            <p class="summary-value">${stats.done}</p>
           </article>
         </section>
 
-        <section class="projects-section" aria-label="Projects list">
+        <section class="projects-section" aria-label="Tasks board">
           <div class="projects-heading-row">
-            <h2>Your projects</h2>
-            <a class="secondary-link" href="/projects">Manage projects</a>
+            <h2>Your tasks</h2>
+            <a class="secondary-link" href="/projects">Projects</a>
           </div>
           <div class="board-grid" role="list">
             <section class="board-column" aria-label="Not Started" data-status="not_started">
@@ -400,7 +363,7 @@ async function bootstrap() {
               </div>
               <div class="board-divider" aria-hidden="true"></div>
               <ul class="board-card-list">
-                ${boardColumns.in_progress.join("") || '<li class="empty-projects">No projects in progress.</li>'}
+                ${boardColumns.in_progress.join("") || '<li class="empty-projects">No tasks in progress.</li>'}
               </ul>
             </section>
 
@@ -411,7 +374,7 @@ async function bootstrap() {
               </div>
               <div class="board-divider" aria-hidden="true"></div>
               <ul class="board-card-list">
-                ${boardColumns.done.join("") || '<li class="empty-projects">No completed projects yet.</li>'}
+                ${boardColumns.done.join("") || '<li class="empty-projects">No completed tasks yet.</li>'}
               </ul>
             </section>
           </div>
@@ -430,30 +393,6 @@ async function bootstrap() {
   renderFooter(document.querySelector("[data-footer]"));
 
   const logoutButton = document.querySelector("[data-logout-btn]");
-  document.querySelectorAll("[data-preview-btn]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const targetId = button.getAttribute("data-preview-target");
-      if (!targetId) {
-        return;
-      }
-
-      const previewEl = document.getElementById(targetId);
-      if (!previewEl) {
-        return;
-      }
-
-      const isHidden = previewEl.hasAttribute("hidden");
-      if (isHidden) {
-        previewEl.removeAttribute("hidden");
-        button.setAttribute("aria-expanded", "true");
-        button.textContent = "Hide preview";
-      } else {
-        previewEl.setAttribute("hidden", "");
-        button.setAttribute("aria-expanded", "false");
-        button.textContent = "Quick preview";
-      }
-    });
-  });
 
   setupBoardDragAndDrop();
 

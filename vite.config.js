@@ -27,6 +27,9 @@ function routeAliasPlugin() {
     "/projects/view",
     "/projects/view/",
     "/projects/view/index.html",
+    "/projects/taskboard",
+    "/projects/taskboard/",
+    "/projects/taskboard/index.html",
     "/404",
     "/404.html"
   ]);
@@ -56,6 +59,16 @@ function routeAliasPlugin() {
 
   const getProjectEditId = (pathname) => {
     const match = pathname.match(/^\/project\/([^/]+)\/edit\/?$/);
+
+    if (!match) {
+      return null;
+    }
+
+    return decodeURIComponent(match[1]);
+  };
+
+  const getProjectTaskboardId = (pathname) => {
+    const match = pathname.match(/^\/project\/([^/]+)\/taskboard\/?$/);
 
     if (!match) {
       return null;
@@ -97,6 +110,10 @@ function routeAliasPlugin() {
       return { url: "/projects/view/index.html", statusCode: null };
     }
 
+    if (pathname === "/projects/taskboard") {
+      return { url: "/projects/taskboard/index.html", statusCode: null };
+    }
+
     const projectId = getProjectViewId(pathname);
     if (projectId) {
       const querySuffix = search ? `&${search}` : "";
@@ -111,6 +128,15 @@ function routeAliasPlugin() {
       const querySuffix = search ? `&${search}` : "";
       return {
         url: `/projects/edit/index.html?id=${encodeURIComponent(projectEditId)}${querySuffix}`,
+        statusCode: null
+      };
+    }
+
+    const projectTaskboardId = getProjectTaskboardId(pathname);
+    if (projectTaskboardId) {
+      const querySuffix = search ? `&${search}` : "";
+      return {
+        url: `/projects/taskboard/index.html?id=${encodeURIComponent(projectTaskboardId)}${querySuffix}`,
         statusCode: null
       };
     }
@@ -136,6 +162,7 @@ function routeAliasPlugin() {
               !knownPaths.has(pathname) &&
               !getProjectViewId(pathname) &&
               !getProjectEditId(pathname) &&
+              !getProjectTaskboardId(pathname) &&
               !pathname.includes(".") &&
               !isInternalViteRequest(pathname)
             ) {
@@ -174,6 +201,7 @@ function routeAliasPlugin() {
               !knownPaths.has(pathname) &&
               !getProjectViewId(pathname) &&
               !getProjectEditId(pathname) &&
+              !getProjectTaskboardId(pathname) &&
               !pathname.includes(".") &&
               !isInternalViteRequest(pathname)
             ) {
@@ -218,7 +246,8 @@ export default defineConfig({
         projects: resolve(__dirname, "projects/index.html"),
         projectsAdd: resolve(__dirname, "projects/add/index.html"),
         projectsEdit: resolve(__dirname, "projects/edit/index.html"),
-        projectsView: resolve(__dirname, "projects/view/index.html")
+        projectsView: resolve(__dirname, "projects/view/index.html"),
+        projectsTaskboard: resolve(__dirname, "projects/taskboard/index.html")
       }
     }
   }

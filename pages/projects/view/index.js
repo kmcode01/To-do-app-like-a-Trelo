@@ -88,6 +88,7 @@ async function bootstrap() {
 
           <div class="form-actions" style="margin-top: 1rem;">
             <a class="action-link" href="/project/${project.id}/edit">Edit</a>
+            <a class="action-link" href="/project/${project.id}/taskboard">Open Taskboard</a>
             <a class="action-link" href="/projects">Back to Projects</a>
           </div>
         </section>

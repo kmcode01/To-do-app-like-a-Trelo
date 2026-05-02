@@ -59,6 +59,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
+  align-items: start;
 }
 
 .board-column {
@@ -69,7 +70,7 @@
   box-shadow: var(--shadow);
   display: grid;
   gap: 0.75rem;
-  min-height: 100%;
+  min-height: auto;
   transition: background-color 160ms ease, border-color 160ms ease;
 }
 
