@@ -96,6 +96,212 @@ async function fetchTaskStats(projectIds) {
   };
 }
 
+function resolveProjectStatus(projectStats) {
+  if (!projectStats.total) {
+    return "not_started";
+  }
+
+  if (projectStats.pending === 0) {
+    return "done";
+  }
+
+  if (projectStats.done === 0) {
+    return "not_started";
+  }
+
+  return "in_progress";
+}
+
+function renderProjectCard(project, projectStats, statusKey) {
+  const title = escapeHtml(project.title || "Untitled project");
+  const description = project.description
+    ? `<p class="project-description">${escapeHtml(project.description)}</p>`
+    : '<p class="project-description is-muted">No description yet.</p>';
+  const previewId = `preview-${project.id}`;
+  const statusLabel =
+    statusKey === "done"
+      ? "Done"
+      : statusKey === "in_progress"
+        ? "In Progress"
+        : "Not Started";
+
+  return `
+    <li class="board-card" draggable="true" data-project-id="${project.id}" data-status="${statusKey}">
+      <div class="board-card-body">
+        <h3>${title}</h3>
+        ${description}
+      </div>
+      <div class="board-card-meta">
+        <span class="status-pill status-${statusKey}">${statusLabel}</span>
+        <span class="meta-text">${projectStats.total} tasks</span>
+      </div>
+      <div class="board-card-meta">
+        <span class="meta-text">${projectStats.pending} pending</span>
+        <span class="meta-text">Created ${formatDate(project.created_at)}</span>
+      </div>
+      <div class="project-actions-row board-actions">
+        <a class="project-action-btn project-action-primary" href="/project/${project.id}">View</a>
+        <button
+          type="button"
+          class="project-action-btn project-action-secondary"
+          data-preview-btn
+          data-preview-target="${previewId}"
+          aria-expanded="false"
+        >
+          Quick preview
+        </button>
+      </div>
+      <div id="${previewId}" class="project-preview" hidden>
+        <p><strong>Created:</strong> ${formatDate(project.created_at)}</p>
+        <p><strong>Tasks:</strong> ${projectStats.total} total | ${projectStats.pending} pending | ${projectStats.done} done</p>
+      </div>
+    </li>
+  `;
+}
+
+function statusLabelFor(statusKey) {
+  if (statusKey === "done") {
+    return "Done";
+  }
+
+  if (statusKey === "in_progress") {
+    return "In Progress";
+  }
+
+  return "Not Started";
+}
+
+function updateCardStatus(card, statusKey) {
+  if (!card) {
+    return;
+  }
+
+  const pill = card.querySelector(".status-pill");
+  if (!pill) {
+    return;
+  }
+
+  card.dataset.status = statusKey;
+  pill.classList.remove("status-not_started", "status-in_progress", "status-done");
+  pill.classList.add(`status-${statusKey}`);
+  pill.textContent = statusLabelFor(statusKey);
+}
+
+function updateColumnCounts() {
+  document.querySelectorAll(".board-column").forEach((column) => {
+    const badge = column.querySelector(".board-badge");
+    if (!badge) {
+      return;
+    }
+
+    const count = column.querySelectorAll(".board-card").length;
+    badge.textContent = count;
+  });
+}
+
+function getDragAfterElement(container, y) {
+  const draggableElements = [
+    ...container.querySelectorAll(".board-card:not(.is-dragging)")
+  ];
+
+  return draggableElements.reduce(
+    (closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset, element: child };
+      }
+
+      return closest;
+    },
+    { offset: Number.NEGATIVE_INFINITY, element: null }
+  ).element;
+}
+
+function setupBoardDragAndDrop() {
+  const lists = document.querySelectorAll(".board-card-list");
+  const columns = document.querySelectorAll(".board-column");
+
+  document.querySelectorAll(".board-card").forEach((card) => {
+    card.addEventListener("dragstart", () => {
+      card.classList.add("is-dragging");
+    });
+
+    card.addEventListener("dragend", () => {
+      card.classList.remove("is-dragging");
+      document.querySelectorAll(".board-column").forEach((column) => {
+        column.classList.remove("is-drop-target");
+      });
+      updateColumnCounts();
+    });
+  });
+
+  lists.forEach((list) => {
+    list.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      const draggingCard = document.querySelector(".board-card.is-dragging");
+      if (!draggingCard) {
+        return;
+      }
+
+      const afterElement = getDragAfterElement(list, event.clientY);
+      if (afterElement) {
+        list.insertBefore(draggingCard, afterElement);
+      } else {
+        list.appendChild(draggingCard);
+      }
+    });
+  });
+
+  columns.forEach((column) => {
+    column.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      column.classList.add("is-drop-target");
+      const list = column.querySelector(".board-card-list");
+      if (!list) {
+        return;
+      }
+
+      const draggingCard = document.querySelector(".board-card.is-dragging");
+      if (!draggingCard) {
+        return;
+      }
+
+      const afterElement = getDragAfterElement(list, event.clientY);
+      if (afterElement) {
+        list.insertBefore(draggingCard, afterElement);
+      } else {
+        list.appendChild(draggingCard);
+      }
+    });
+
+    column.addEventListener("dragleave", () => {
+      column.classList.remove("is-drop-target");
+    });
+
+    column.addEventListener("drop", () => {
+      const list = column.querySelector(".board-card-list");
+      const draggingCard = document.querySelector(".board-card.is-dragging");
+      if (!list || !draggingCard) {
+        return;
+      }
+
+      const emptyPlaceholder = list.querySelector(".empty-projects");
+      if (emptyPlaceholder) {
+        emptyPlaceholder.remove();
+      }
+
+      const statusKey = column.dataset.status;
+      if (statusKey) {
+        updateCardStatus(draggingCard, statusKey);
+      }
+
+      column.classList.remove("is-drop-target");
+      updateColumnCounts();
+    });
+  });
+}
+
 async function bootstrap() {
   const session = await requireAuthenticatedSession("/login");
 
@@ -114,46 +320,33 @@ async function bootstrap() {
   const taskStats = await fetchTaskStats(projectIds);
 
   const email = session.user?.email ?? "your account";
-  const projectCards =
-    projects.length > 0
-      ? projects
-          .map((project) => {
-            const title = escapeHtml(project.title || "Untitled project");
-            const description = project.description
-              ? `<p class="project-description">${escapeHtml(project.description)}</p>`
-              : '<p class="project-description is-muted">No description yet.</p>';
-            const projectStats = taskStats.byProjectId[project.id] ?? {
-              total: 0,
-              pending: 0,
-              done: 0
-            };
-            const previewId = `preview-${project.id}`;
+  const boardColumns = {
+    not_started: [],
+    in_progress: [],
+    done: []
+  };
 
-            return `
-              <li class="project-card">
-                <h3>${title}</h3>
-                ${description}
-                <div class="project-actions-row">
-                  <a class="project-action-btn project-action-primary" href="/project/${project.id}">View</a>
-                  <button
-                    type="button"
-                    class="project-action-btn project-action-secondary"
-                    data-preview-btn
-                    data-preview-target="${previewId}"
-                    aria-expanded="false"
-                  >
-                    Quick preview
-                  </button>
-                </div>
-                <div id="${previewId}" class="project-preview" hidden>
-                  <p><strong>Created:</strong> ${formatDate(project.created_at)}</p>
-                  <p><strong>Tasks:</strong> ${projectStats.total} total | ${projectStats.pending} pending | ${projectStats.done} done</p>
-                </div>
-              </li>
-            `;
-          })
-          .join("")
-      : '<li class="empty-projects">No projects yet. Create your first project to start planning tasks.</li>';
+  projects.forEach((project) => {
+    const projectStats = taskStats.byProjectId[project.id] ?? {
+      total: 0,
+      pending: 0,
+      done: 0
+    };
+    const statusKey = resolveProjectStatus(projectStats);
+    boardColumns[statusKey].push(renderProjectCard(project, projectStats, statusKey));
+  });
+
+  const columnCounts = {
+    not_started: boardColumns.not_started.length,
+    in_progress: boardColumns.in_progress.length,
+    done: boardColumns.done.length
+  };
+
+  if (projects.length === 0) {
+    boardColumns.not_started.push(
+      '<li class="empty-projects">No projects yet. Create your first project to start planning tasks.</li>'
+    );
+  }
 
   app.innerHTML = `
     <div class="page-shell">
@@ -188,9 +381,40 @@ async function bootstrap() {
             <h2>Your projects</h2>
             <a class="secondary-link" href="/projects">Manage projects</a>
           </div>
-          <ul class="projects-list">
-            ${projectCards}
-          </ul>
+          <div class="board-grid" role="list">
+            <section class="board-column" aria-label="Not Started" data-status="not_started">
+              <div class="board-column-header">
+                <h3>Not Started</h3>
+                <span class="board-badge">${columnCounts.not_started}</span>
+              </div>
+              <div class="board-divider" aria-hidden="true"></div>
+              <ul class="board-card-list">
+                ${boardColumns.not_started.join("")}
+              </ul>
+            </section>
+
+            <section class="board-column" aria-label="In Progress" data-status="in_progress">
+              <div class="board-column-header">
+                <h3>In Progress</h3>
+                <span class="board-badge">${columnCounts.in_progress}</span>
+              </div>
+              <div class="board-divider" aria-hidden="true"></div>
+              <ul class="board-card-list">
+                ${boardColumns.in_progress.join("") || '<li class="empty-projects">No projects in progress.</li>'}
+              </ul>
+            </section>
+
+            <section class="board-column" aria-label="Done" data-status="done">
+              <div class="board-column-header">
+                <h3>Done</h3>
+                <span class="board-badge">${columnCounts.done}</span>
+              </div>
+              <div class="board-divider" aria-hidden="true"></div>
+              <ul class="board-card-list">
+                ${boardColumns.done.join("") || '<li class="empty-projects">No completed projects yet.</li>'}
+              </ul>
+            </section>
+          </div>
         </section>
 
         <div class="actions-row">
@@ -230,6 +454,8 @@ async function bootstrap() {
       }
     });
   });
+
+  setupBoardDragAndDrop();
 
   logoutButton.addEventListener("click", async () => {
     logoutButton.disabled = true;
