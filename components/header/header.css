@@ -33,6 +33,20 @@
   font-weight: 500;
 }
 
+.nav-button {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+
+.nav-button:hover {
+  color: var(--primary);
+}
+
 .nav-list a.is-active {
   color: var(--primary);
 }

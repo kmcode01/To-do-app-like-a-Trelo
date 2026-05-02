@@ -31,28 +31,33 @@ function iconSvg(path) {
 }
 
 function renderPage(projects, showCreatedNotice) {
-  const rows = projects.length
+  const cards = projects.length
     ? projects
         .map(
           (project) => `
-            <tr data-project-row="${project.id}">
-              <td>${escapeHtml(project.title)}</td>
-              <td>${escapeHtml(project.description || "-")}</td>
-              <td>${formatDate(project.created_at)}</td>
-              <td>
-                <div class="actions-cell">
-                  <a class="icon-link" href="/project/${project.id}" aria-label="View project">
-                    ${iconSvg("M12 5c5.5 0 9.6 4.1 10.8 6.4.3.4.3.8 0 1.2C21.6 14.9 17.5 19 12 19S2.4 14.9 1.2 12.6a1 1 0 0 1 0-1.2C2.4 9.1 6.5 5 12 5Zm0 2.2A4.8 4.8 0 1 0 12 17a4.8 4.8 0 0 0 0-9.8Zm0 2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6")}
-                  </a>
-                  <a class="icon-link" href="/project/${project.id}/edit" aria-label="Edit project">
-                    ${iconSvg("M3 17.2V21h3.8l11-11.1-3.8-3.8L3 17.2Zm17.7-10.3a1 1 0 0 0 0-1.4l-2.2-2.2a1 1 0 0 0-1.4 0l-1.7 1.7 3.8 3.8 1.5-1.9Z")}
-                  </a>
-                  <button class="icon-btn is-danger" type="button" data-delete-project-id="${project.id}" data-delete-project-title="${escapeHtml(project.title)}" aria-label="Delete project">
-                    ${iconSvg("M7 4h10l1 2h3v2H3V6h3l1-2Zm1 6h2v8H8v-8Zm6 0h2v8h-2v-8Z")}
-                  </button>
-                </div>
-              </td>
-            </tr>
+            <article class="project-card" data-project-card="${project.id}">
+              <div class="project-card-body">
+                <h2>${escapeHtml(project.title)}</h2>
+                <p class="project-description">
+                  ${escapeHtml(project.description || "No description yet.")}
+                </p>
+              </div>
+              <div class="project-meta">
+                <span class="meta-label">Created</span>
+                <span class="meta-value">${formatDate(project.created_at)}</span>
+              </div>
+              <div class="project-card-actions">
+                <a class="icon-link" href="/project/${project.id}" aria-label="View project">
+                  ${iconSvg("M12 5c5.5 0 9.6 4.1 10.8 6.4.3.4.3.8 0 1.2C21.6 14.9 17.5 19 12 19S2.4 14.9 1.2 12.6a1 1 0 0 1 0-1.2C2.4 9.1 6.5 5 12 5Zm0 2.2A4.8 4.8 0 1 0 12 17a4.8 4.8 0 0 0 0-9.8Zm0 2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6")}
+                </a>
+                <a class="icon-link" href="/project/${project.id}/edit" aria-label="Edit project">
+                  ${iconSvg("M3 17.2V21h3.8l11-11.1-3.8-3.8L3 17.2Zm17.7-10.3a1 1 0 0 0 0-1.4l-2.2-2.2a1 1 0 0 0-1.4 0l-1.7 1.7 3.8 3.8 1.5-1.9Z")}
+                </a>
+                <button class="icon-btn is-danger" type="button" data-delete-project-id="${project.id}" data-delete-project-title="${escapeHtml(project.title)}" aria-label="Delete project">
+                  ${iconSvg("M7 4h10l1 2h3v2H3V6h3l1-2Zm1 6h2v8H8v-8Zm6 0h2v8h-2v-8Z")}
+                </button>
+              </div>
+            </article>
           `
         )
         .join("")
@@ -75,25 +80,13 @@ function renderPage(projects, showCreatedNotice) {
             : ""
         }
 
-        <div class="table-wrap">
-          ${
-            projects.length
-              ? `<table class="projects-table">
-                  <thead>
-                    <tr>
-                      <th>Title</th>
-                      <th>Description</th>
-                      <th>Created</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${rows}
-                  </tbody>
-                </table>`
-              : '<p class="empty-state">No projects found for this user.</p>'
-          }
-        </div>
+        ${
+          projects.length
+            ? `<section class="projects-grid" aria-label="Project cards">
+                ${cards}
+              </section>`
+            : '<p class="empty-state">No projects found for this user.</p>'
+        }
       </main>
       <div data-footer></div>
     </div>
@@ -197,9 +190,9 @@ async function bootstrap() {
       return;
     }
 
-    const row = document.querySelector(`[data-project-row=\"${deleteId}\"]`);
-    if (row) {
-      row.remove();
+    const card = document.querySelector(`[data-project-card=\"${deleteId}\"]`);
+    if (card) {
+      card.remove();
     }
 
     pendingDelete = null;
