@@ -72,6 +72,9 @@
   display: grid;
   gap: 0.75rem;
   min-height: 3rem;
+  max-height: min(85vh, 680px);
+  overflow-y: auto;
+  padding-right: 0.25rem;
 }
 
 .task-card,
