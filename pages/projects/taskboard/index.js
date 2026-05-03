@@ -45,14 +45,36 @@ function renderTaskCard(task, stageId, doneFlag) {
     ? `<p class="task-description">${escapeHtml(description)}</p>`
     : '<p class="task-description">No description yet.</p>';
   const position = Number.isFinite(task.position) ? task.position : 0;
+  const priority = escapeHtml(task.priority || "medium");
 
   return `
     <li class="task-card" draggable="true" data-task-id="${task.id}" data-stage-id="${stageId}" data-position="${position}">
-      <h3 class="task-title">${safeTitle}</h3>
+      <h3 class="task-title" data-task-title>${safeTitle}</h3>
       ${safeDescription}
       <div class="task-meta">
         <span class="${statusClass}">${statusLabel}</span>
         <span class="task-meta-text">Created ${formatDate(task.created_at)}</span>
+      </div>
+      <div class="task-actions">
+        <button
+          type="button"
+          class="task-action-btn"
+          data-task-edit
+          data-task-id="${task.id}"
+          data-task-title="${safeTitle}"
+          data-task-description="${escapeHtml(description)}"
+          data-task-priority="${priority}"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          class="task-action-btn is-danger"
+          data-task-delete
+          data-task-id="${task.id}"
+        >
+          Delete
+        </button>
       </div>
     </li>
   `;
@@ -452,6 +474,44 @@ async function bootstrap() {
         </div>
       </form>
     </dialog>
+
+    <dialog class="task-dialog" data-task-edit-dialog>
+      <form class="dialog-body" data-task-edit-form method="dialog">
+        <h2>Edit task</h2>
+        <div class="field">
+          <label for="edit-task-title">Title</label>
+          <input id="edit-task-title" name="title" type="text" maxlength="140" required />
+        </div>
+        <div class="field">
+          <label for="edit-task-description">Description</label>
+          <textarea id="edit-task-description" name="description" maxlength="1000"></textarea>
+        </div>
+        <div class="field">
+          <label for="edit-task-priority">Priority</label>
+          <select id="edit-task-priority" name="priority" required>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+        </div>
+        <p class="message" data-task-edit-message role="status" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button class="btn-secondary" type="button" data-task-edit-cancel>Cancel</button>
+          <button class="btn-primary" type="submit" data-task-edit-submit>Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="task-dialog" data-task-delete-dialog>
+      <div class="dialog-body">
+        <h2>Delete task</h2>
+        <p data-task-delete-message>Are you sure you want to delete this task?</p>
+        <div class="dialog-actions">
+          <button class="btn-secondary" type="button" data-task-delete-cancel>Cancel</button>
+          <button class="btn-danger" type="button" data-task-delete-confirm>Delete</button>
+        </div>
+      </div>
+    </dialog>
   `;
 
   renderHeader(document.querySelector("[data-header]"), "/projects");
@@ -464,6 +524,21 @@ async function bootstrap() {
   const formMessage = document.querySelector("[data-task-form-message]");
   const cancelButton = document.querySelector("[data-cancel-task]");
   const submitButton = document.querySelector("[data-submit-task]");
+  const editDialog = document.querySelector("[data-task-edit-dialog]");
+  const editForm = document.querySelector("[data-task-edit-form]");
+  const editMessage = document.querySelector("[data-task-edit-message]");
+  const editCancel = document.querySelector("[data-task-edit-cancel]");
+  const editSubmit = document.querySelector("[data-task-edit-submit]");
+  const deleteDialog = document.querySelector("[data-task-delete-dialog]");
+  const deleteMessage = document.querySelector("[data-task-delete-message]");
+  const deleteCancel = document.querySelector("[data-task-delete-cancel]");
+  const deleteConfirm = document.querySelector("[data-task-delete-confirm]");
+  const editTitleInput = document.querySelector("#edit-task-title");
+  const editDescriptionInput = document.querySelector("#edit-task-description");
+  const editPriorityInput = document.querySelector("#edit-task-priority");
+
+  let activeTaskId = null;
+  let activeTaskCard = null;
 
   if (!stageList.length && createButton) {
     createButton.disabled = true;
@@ -570,6 +645,136 @@ async function bootstrap() {
       messageEl.textContent = "";
       dialog.close();
       form.reset();
+    });
+  }
+
+  document.querySelectorAll("[data-task-edit]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeTaskId = button.dataset.taskId || null;
+      activeTaskCard = button.closest(".task-card");
+      editTitleInput.value = button.dataset.taskTitle || "";
+      editDescriptionInput.value = button.dataset.taskDescription || "";
+      editPriorityInput.value = button.dataset.taskPriority || "medium";
+      editMessage.textContent = "";
+      editMessage.classList.remove("is-error");
+      editDialog.showModal();
+    });
+  });
+
+  if (editCancel) {
+    editCancel.addEventListener("click", () => {
+      editDialog.close();
+    });
+  }
+
+  if (editForm) {
+    editForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      editMessage.textContent = "";
+      editMessage.classList.remove("is-error");
+
+      if (!activeTaskId) {
+        editMessage.textContent = "Missing task id.";
+        editMessage.classList.add("is-error");
+        return;
+      }
+
+      const title = editTitleInput.value.trim();
+      const description = editDescriptionInput.value.trim();
+      const priority = editPriorityInput.value;
+
+      if (!title) {
+        editMessage.textContent = "Title is required.";
+        editMessage.classList.add("is-error");
+        return;
+      }
+
+      editSubmit.disabled = true;
+      editSubmit.textContent = "Saving...";
+
+      const descriptionHtml = description ? `<p>${escapeHtml(description)}</p>` : null;
+      const { error } = await supabase
+        .from("tasks")
+        .update({
+          title,
+          description_html: descriptionHtml,
+          description: description || null,
+          priority
+        })
+        .eq("id", activeTaskId);
+
+      editSubmit.disabled = false;
+      editSubmit.textContent = "Save";
+
+      if (error) {
+        editMessage.textContent = error.message;
+        editMessage.classList.add("is-error");
+        return;
+      }
+
+      if (activeTaskCard) {
+        const titleEl = activeTaskCard.querySelector("[data-task-title]");
+        const descEl = activeTaskCard.querySelector(".task-description");
+        if (titleEl) {
+          titleEl.textContent = title;
+        }
+        if (descEl) {
+          descEl.textContent = description || "No description yet.";
+        }
+      }
+
+      editDialog.close();
+    });
+  }
+
+  document.querySelectorAll("[data-task-delete]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeTaskId = button.dataset.taskId || null;
+      activeTaskCard = button.closest(".task-card");
+      deleteMessage.textContent = "Are you sure you want to delete this task?";
+      deleteDialog.showModal();
+    });
+  });
+
+  if (deleteCancel) {
+    deleteCancel.addEventListener("click", () => {
+      deleteDialog.close();
+    });
+  }
+
+  if (deleteConfirm) {
+    deleteConfirm.addEventListener("click", async () => {
+      if (!activeTaskId) {
+        deleteDialog.close();
+        return;
+      }
+
+      deleteConfirm.disabled = true;
+      deleteConfirm.textContent = "Deleting...";
+
+      const { error } = await supabase.from("tasks").delete().eq("id", activeTaskId);
+
+      deleteConfirm.disabled = false;
+      deleteConfirm.textContent = "Delete";
+
+      if (error) {
+        deleteMessage.textContent = error.message;
+        return;
+      }
+
+      if (activeTaskCard) {
+        const list = activeTaskCard.closest(".task-list");
+        activeTaskCard.remove();
+        if (list && !list.querySelector(".task-card")) {
+          list.insertAdjacentHTML(
+            "beforeend",
+            '<li class="task-empty">No tasks in this stage.</li>'
+          );
+        }
+      }
+
+      updateColumnCounts();
+      deleteDialog.close();
     });
   }
 

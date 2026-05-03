@@ -80,8 +80,8 @@ function renderTaskCard(task, statusKey) {
   return `
     <li class="board-card" draggable="true" data-task-id="${task.id}" data-status="${statusKey}">
       <div class="board-card-body">
-        <h3>${title}</h3>
-        ${description}
+        <h3 data-task-title>${title}</h3>
+        <div data-task-description>${description}</div>
       </div>
       <div class="board-card-meta">
         <span class="status-pill status-${statusKey}">${statusLabel}</span>
@@ -89,7 +89,7 @@ function renderTaskCard(task, statusKey) {
       </div>
       <div class="board-card-meta">
         <span class="meta-text">Stage: ${stageName}</span>
-        <span class="meta-text">Priority: ${priority}</span>
+        <span class="meta-text" data-task-priority>Priority: ${priority}</span>
       </div>
       <div class="board-card-meta">
         <span class="meta-text">Created ${formatDate(task.created_at)}</span>
@@ -98,6 +98,25 @@ function renderTaskCard(task, statusKey) {
       <div class="project-actions-row board-actions">
         <a class="project-action-btn project-action-primary" href="/project/${task.project_id}">Open project</a>
         <a class="project-action-btn project-action-secondary" href="/project/${task.project_id}/taskboard">Taskboard</a>
+        <button
+          type="button"
+          class="project-action-btn project-action-secondary"
+          data-task-edit
+          data-task-id="${task.id}"
+          data-task-title="${title}"
+          data-task-description="${escapeHtml(descriptionText)}"
+          data-task-priority="${priority}"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          class="project-action-btn project-action-danger"
+          data-task-delete
+          data-task-id="${task.id}"
+        >
+          Delete
+        </button>
       </div>
     </li>
   `;
@@ -387,6 +406,44 @@ async function bootstrap() {
       </main>
       <div data-footer></div>
     </div>
+
+    <dialog class="task-dialog" data-task-edit-dialog>
+      <form class="dialog-body" data-task-edit-form method="dialog">
+        <h2>Edit task</h2>
+        <div class="field">
+          <label for="edit-task-title">Title</label>
+          <input id="edit-task-title" name="title" type="text" maxlength="140" required />
+        </div>
+        <div class="field">
+          <label for="edit-task-description">Description</label>
+          <textarea id="edit-task-description" name="description" maxlength="1000"></textarea>
+        </div>
+        <div class="field">
+          <label for="edit-task-priority">Priority</label>
+          <select id="edit-task-priority" name="priority" required>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+        </div>
+        <p class="message" data-task-edit-message role="status" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button class="btn-secondary" type="button" data-task-edit-cancel>Cancel</button>
+          <button class="btn-primary" type="submit" data-task-edit-submit>Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="task-dialog" data-task-delete-dialog>
+      <div class="dialog-body">
+        <h2>Delete task</h2>
+        <p data-task-delete-message>Are you sure you want to delete this task?</p>
+        <div class="dialog-actions">
+          <button class="btn-secondary" type="button" data-task-delete-cancel>Cancel</button>
+          <button class="btn-danger" type="button" data-task-delete-confirm>Delete</button>
+        </div>
+      </div>
+    </dialog>
   `;
 
   renderHeader(document.querySelector("[data-header]"), "/dashboard");
@@ -395,6 +452,158 @@ async function bootstrap() {
   const logoutButton = document.querySelector("[data-logout-btn]");
 
   setupBoardDragAndDrop();
+
+  const editDialog = document.querySelector("[data-task-edit-dialog]");
+  const editForm = document.querySelector("[data-task-edit-form]");
+  const editMessage = document.querySelector("[data-task-edit-message]");
+  const editCancel = document.querySelector("[data-task-edit-cancel]");
+  const editSubmit = document.querySelector("[data-task-edit-submit]");
+  const deleteDialog = document.querySelector("[data-task-delete-dialog]");
+  const deleteMessage = document.querySelector("[data-task-delete-message]");
+  const deleteCancel = document.querySelector("[data-task-delete-cancel]");
+  const deleteConfirm = document.querySelector("[data-task-delete-confirm]");
+  const editTitleInput = document.querySelector("#edit-task-title");
+  const editDescriptionInput = document.querySelector("#edit-task-description");
+  const editPriorityInput = document.querySelector("#edit-task-priority");
+
+  let activeTaskId = null;
+  let activeTaskCard = null;
+
+  document.querySelectorAll("[data-task-edit]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeTaskId = button.dataset.taskId || null;
+      activeTaskCard = button.closest(".board-card");
+      editTitleInput.value = button.dataset.taskTitle || "";
+      editDescriptionInput.value = button.dataset.taskDescription || "";
+      editPriorityInput.value = button.dataset.taskPriority || "medium";
+      editMessage.textContent = "";
+      editMessage.classList.remove("is-error");
+      editDialog.showModal();
+    });
+  });
+
+  if (editCancel) {
+    editCancel.addEventListener("click", () => {
+      editDialog.close();
+    });
+  }
+
+  if (editForm) {
+    editForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      editMessage.textContent = "";
+      editMessage.classList.remove("is-error");
+
+      if (!activeTaskId) {
+        editMessage.textContent = "Missing task id.";
+        editMessage.classList.add("is-error");
+        return;
+      }
+
+      const title = editTitleInput.value.trim();
+      const description = editDescriptionInput.value.trim();
+      const priority = editPriorityInput.value;
+
+      if (!title) {
+        editMessage.textContent = "Title is required.";
+        editMessage.classList.add("is-error");
+        return;
+      }
+
+      editSubmit.disabled = true;
+      editSubmit.textContent = "Saving...";
+
+      const descriptionHtml = description ? `<p>${escapeHtml(description)}</p>` : null;
+      const { error } = await supabase
+        .from("tasks")
+        .update({
+          title,
+          description_html: descriptionHtml,
+          description: description || null,
+          priority
+        })
+        .eq("id", activeTaskId);
+
+      editSubmit.disabled = false;
+      editSubmit.textContent = "Save";
+
+      if (error) {
+        editMessage.textContent = error.message;
+        editMessage.classList.add("is-error");
+        return;
+      }
+
+      if (activeTaskCard) {
+        const titleEl = activeTaskCard.querySelector("[data-task-title]");
+        const descEl = activeTaskCard.querySelector("[data-task-description]");
+        const priorityEl = activeTaskCard.querySelector("[data-task-priority]");
+        if (titleEl) {
+          titleEl.textContent = title;
+        }
+        if (descEl) {
+          descEl.innerHTML = description
+            ? `<p class="project-description">${escapeHtml(description)}</p>`
+            : '<p class="project-description is-muted">No description yet.</p>';
+        }
+        if (priorityEl) {
+          priorityEl.textContent = `Priority: ${priority}`;
+        }
+      }
+
+      editDialog.close();
+    });
+  }
+
+  document.querySelectorAll("[data-task-delete]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeTaskId = button.dataset.taskId || null;
+      activeTaskCard = button.closest(".board-card");
+      deleteMessage.textContent = "Are you sure you want to delete this task?";
+      deleteDialog.showModal();
+    });
+  });
+
+  if (deleteCancel) {
+    deleteCancel.addEventListener("click", () => {
+      deleteDialog.close();
+    });
+  }
+
+  if (deleteConfirm) {
+    deleteConfirm.addEventListener("click", async () => {
+      if (!activeTaskId) {
+        deleteDialog.close();
+        return;
+      }
+
+      deleteConfirm.disabled = true;
+      deleteConfirm.textContent = "Deleting...";
+
+      const { error } = await supabase.from("tasks").delete().eq("id", activeTaskId);
+
+      deleteConfirm.disabled = false;
+      deleteConfirm.textContent = "Delete";
+
+      if (error) {
+        deleteMessage.textContent = error.message;
+        return;
+      }
+
+      if (activeTaskCard) {
+        const list = activeTaskCard.closest(".board-card-list");
+        activeTaskCard.remove();
+        if (list && !list.querySelector(".board-card")) {
+          list.insertAdjacentHTML(
+            "beforeend",
+            '<li class="empty-projects">No tasks in this stage.</li>'
+          );
+        }
+      }
+
+      updateColumnCounts();
+      deleteDialog.close();
+    });
+  }
 
   logoutButton.addEventListener("click", async () => {
     logoutButton.disabled = true;

@@ -139,6 +139,41 @@
   color: var(--muted);
 }
 
+.task-actions {
+  margin-top: 0.65rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.task-action-btn {
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text);
+  border-radius: 0.65rem;
+  padding: 0.45rem 0.75rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: transform 140ms ease, background-color 140ms ease, color 140ms ease,
+    border-color 140ms ease;
+}
+
+.task-action-btn:hover {
+  transform: translateY(-1px);
+  background: #f5fbf8;
+}
+
+.task-action-btn.is-danger {
+  border-color: #e6b5bf;
+  color: var(--danger);
+  background: #ffffff;
+}
+
+.task-action-btn.is-danger:hover {
+  background: #fff4f6;
+}
+
 .task-empty {
   color: var(--muted);
   pointer-events: none;
@@ -153,6 +188,24 @@
 
 .task-dialog::backdrop {
   background: rgba(5, 15, 24, 0.45);
+}
+
+.dialog-body {
+  padding: 1rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.dialog-body h2 {
+  margin: 0;
+}
+
+.dialog-actions {
+  margin-top: 0.9rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 960px) {
