@@ -36,10 +36,46 @@ function isDoneStage(name) {
   return String(name || "").toLowerCase().includes("done");
 }
 
-function renderTaskCard(task, stageId, doneFlag) {
+function resolveStageStatus(name) {
+  const normalized = String(name || "").toLowerCase();
+
+  if (normalized.includes("done")) {
+    return "done";
+  }
+
+  if (normalized.includes("in progress")) {
+    return "in_progress";
+  }
+
+  return "todo";
+}
+
+function formatStageLabel(name, doneFlag) {
+  const normalized = String(name || "").toLowerCase();
+
+  if (doneFlag || normalized.includes("done")) {
+    return "Done";
+  }
+
+  if (normalized.includes("in progress")) {
+    return "In Progress";
+  }
+
+  if (normalized.includes("not started")) {
+    return "Not Started";
+  }
+
+  if (!name) {
+    return "Active";
+  }
+
+  return String(name).replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function renderTaskCard(task, stageId, stageName, doneFlag) {
   const description = stripHtml(task.description_html || "");
   const statusClass = doneFlag ? "task-status is-done" : "task-status";
-  const statusLabel = doneFlag ? "Done" : "Active";
+  const statusLabel = formatStageLabel(stageName, doneFlag);
   const safeTitle = escapeHtml(task.title || "Untitled task");
   const safeDescription = description
     ? `<p class="task-description">${escapeHtml(description)}</p>`
@@ -134,7 +170,7 @@ function ensureEmptyState(list) {
   }
 }
 
-function updateTaskStatus(card, doneFlag) {
+function updateTaskStatus(card, stageName, doneFlag) {
   const status = card.querySelector(".task-status");
   if (!status) {
     return;
@@ -142,10 +178,10 @@ function updateTaskStatus(card, doneFlag) {
 
   if (doneFlag) {
     status.classList.add("is-done");
-    status.textContent = "Done";
+    status.textContent = formatStageLabel(stageName, doneFlag);
   } else {
     status.classList.remove("is-done");
-    status.textContent = "Active";
+    status.textContent = formatStageLabel(stageName, doneFlag);
   }
 }
 
@@ -164,13 +200,12 @@ function wireTaskCard(card) {
   });
 }
 
-async function persistListOrder(list, stageId, doneFlag) {
+async function persistListOrder(list, stageId, doneFlag, statusValue) {
   const cards = [...list.querySelectorAll(".task-card")];
   if (!cards.length) {
     return;
   }
 
-  const statusValue = doneFlag ? "done" : "todo";
   const taskIds = cards.map((card) => card.dataset.taskId).filter(Boolean);
 
   const { error } = await supabase.rpc("reorder_tasks", {
@@ -250,12 +285,13 @@ function setupTaskDragAndDrop(stageMeta, messageEl) {
       const stageId = column.dataset.stageId || "";
       const stageInfo = stageMeta.get(stageId);
       const doneFlag = Boolean(stageInfo?.done);
+      const statusValue = resolveStageStatus(stageInfo?.name);
       const sourceStageId = dragState.sourceStageId;
 
       draggingCard.dataset.stageId = stageId;
       list.querySelectorAll(".task-card").forEach((card) => {
         card.dataset.stageId = stageId;
-        updateTaskStatus(card, doneFlag);
+        updateTaskStatus(card, stageInfo?.name, doneFlag);
       });
       column.classList.remove("is-drop-target");
 
@@ -270,7 +306,7 @@ function setupTaskDragAndDrop(stageMeta, messageEl) {
           const sourceDone = Boolean(sourceInfo?.done);
           sourceList.querySelectorAll(".task-card").forEach((card) => {
             card.dataset.stageId = sourceStageId;
-            updateTaskStatus(card, sourceDone);
+            updateTaskStatus(card, sourceInfo?.name, sourceDone);
           });
           ensureEmptyState(sourceList);
         }
@@ -287,11 +323,17 @@ function setupTaskDragAndDrop(stageMeta, messageEl) {
             `.taskboard-column[data-stage-id="${sourceStageId}"] .task-list`
           );
           if (sourceList) {
-            await persistListOrder(sourceList, sourceStageId, Boolean(sourceInfo?.done));
+            const sourceStatus = resolveStageStatus(sourceInfo?.name);
+            await persistListOrder(
+              sourceList,
+              sourceStageId,
+              Boolean(sourceInfo?.done),
+              sourceStatus
+            );
           }
         }
 
-        await persistListOrder(list, stageId, doneFlag);
+        await persistListOrder(list, stageId, doneFlag, statusValue);
       } catch (error) {
         messageEl.textContent = error.message;
         messageEl.classList.add("is-error");
@@ -400,7 +442,7 @@ async function bootstrap() {
       const doneFlag = Boolean(stageMeta.get(stage.id)?.done);
       const cards = stageTasks.length
         ? stageTasks
-            .map((task) => renderTaskCard(task, stage.id, doneFlag))
+            .map((task) => renderTaskCard(task, stage.id, stage.name, doneFlag))
             .join("")
         : '<li class="task-empty">No tasks in this stage.</li>';
 
@@ -587,8 +629,9 @@ async function bootstrap() {
       submitButton.disabled = true;
       submitButton.textContent = "Creating...";
 
-      const doneFlag = Boolean(stageMeta.get(stageId)?.done);
-      const statusValue = doneFlag ? "done" : "todo";
+      const stageInfo = stageMeta.get(stageId);
+      const doneFlag = Boolean(stageInfo?.done);
+      const statusValue = resolveStageStatus(stageInfo?.name);
       const descriptionHtml = description ? `<p>${escapeHtml(description)}</p>` : null;
       const position = targetList.querySelectorAll(".task-card").length;
       const existingPositions = [...targetList.querySelectorAll(".task-card")]
@@ -629,7 +672,7 @@ async function bootstrap() {
         return;
       }
 
-      const cardMarkup = renderTaskCard(newTask, stageId, doneFlag);
+      const cardMarkup = renderTaskCard(newTask, stageId, stageInfo?.name, doneFlag);
       const empty = targetList.querySelector(".task-empty");
       if (empty) {
         empty.remove();

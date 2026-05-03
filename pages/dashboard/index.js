@@ -50,11 +50,23 @@ function resolveTaskStatus(task) {
   const stageName = String(task.project_stages?.name || "").toLowerCase();
   const status = String(task.status || "").toLowerCase();
 
-  if (stageName.includes("done") || task.done || status === "done") {
+  if (status === "done" || status === "in_progress") {
+    return status;
+  }
+
+  if (status === "todo" || status === "not_started") {
+    return "not_started";
+  }
+
+  if (task.done) {
     return "done";
   }
 
-  if (stageName.includes("in progress") || status === "in_progress") {
+  if (stageName.includes("done")) {
+    return "done";
+  }
+
+  if (stageName.includes("in progress")) {
     return "in_progress";
   }
 
@@ -268,7 +280,7 @@ function setupBoardDragAndDrop() {
       }
 
       const doneFlag = statusKey === "done";
-      const statusValue = doneFlag ? "done" : "todo";
+      const statusValue = statusKey === "not_started" ? "todo" : statusKey;
 
       const { error } = await supabase
         .from("tasks")
