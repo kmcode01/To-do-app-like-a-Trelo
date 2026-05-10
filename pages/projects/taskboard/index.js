@@ -150,6 +150,78 @@ async function addAttachmentPreviewUrls(attachments) {
   return enriched;
 }
 
+async function fetchTaskCoverUrls(taskIds) {
+  if (!taskIds.length) {
+    return new Map();
+  }
+
+  const { data, error } = await supabase
+    .from("task_attachments")
+    .select("task_id, file_path, file_name, mime_type, created_at")
+    .in("task_id", taskIds)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const firstImageByTask = new Map();
+  (data || []).forEach((attachment) => {
+    if (firstImageByTask.has(attachment.task_id)) {
+      return;
+    }
+
+    if (isImageAttachment(attachment.mime_type, attachment.file_name)) {
+      firstImageByTask.set(attachment.task_id, attachment);
+    }
+  });
+
+  const coverMap = new Map();
+  for (const [taskId, attachment] of firstImageByTask.entries()) {
+    const { data: signed, error: signedError } = await supabase.storage
+      .from(ATTACHMENTS_BUCKET)
+      .createSignedUrl(attachment.file_path, ATTACHMENT_PREVIEW_TTL_SECONDS);
+
+    if (!signedError && signed?.signedUrl) {
+      coverMap.set(taskId, signed.signedUrl);
+    }
+  }
+
+  return coverMap;
+}
+
+async function fetchTaskCoverUrl(taskId) {
+  const coverMap = await fetchTaskCoverUrls([taskId]);
+  return coverMap.get(taskId) || "";
+}
+
+function updateTaskCardCover(card, coverUrl, title) {
+  if (!card) {
+    return;
+  }
+
+  const existing = card.querySelector(".task-cover");
+  if (!coverUrl) {
+    if (existing) {
+      existing.remove();
+    }
+    return;
+  }
+
+  const safeCoverUrl = escapeHtml(coverUrl);
+  const safeTitle = escapeHtml(title || "Task");
+  if (existing) {
+    existing.src = coverUrl;
+    existing.alt = `${safeTitle} cover`;
+    return;
+  }
+
+  card.insertAdjacentHTML(
+    "afterbegin",
+    `<img class="task-cover" src="${safeCoverUrl}" alt="${safeTitle} cover" />`
+  );
+}
+
 async function refreshAttachmentEditor(taskId, editor) {
   if (!editor) {
     return [];
@@ -238,11 +310,14 @@ async function persistAttachmentChanges(taskId, editor, userId) {
   return refreshAttachmentEditor(taskId, editor);
 }
 
-function renderTaskCard(task, stageId, stageName, doneFlag) {
+function renderTaskCard(task, stageId, stageName, doneFlag, coverUrl) {
   const description = stripHtml(task.description_html || "");
   const statusClass = doneFlag ? "task-status is-done" : "task-status";
   const statusLabel = formatStageLabel(stageName, doneFlag);
   const safeTitle = escapeHtml(task.title || "Untitled task");
+  const coverMarkup = coverUrl
+    ? `<img class="task-cover" src="${escapeHtml(coverUrl)}" alt="${safeTitle} cover" />`
+    : "";
   const safeDescription = description
     ? `<p class="task-description">${escapeHtml(description)}</p>`
     : '<p class="task-description">No description yet.</p>';
@@ -251,6 +326,7 @@ function renderTaskCard(task, stageId, stageName, doneFlag) {
 
   return `
     <li class="task-card" draggable="true" data-task-id="${task.id}" data-stage-id="${stageId}" data-position="${position}">
+      ${coverMarkup}
       <h3 class="task-title" data-task-title>${safeTitle}</h3>
       ${safeDescription}
       <div class="task-meta">
@@ -596,6 +672,7 @@ async function bootstrap() {
   const taskList = tasks ?? [];
   const tasksByStage = new Map();
   const stageMeta = new Map();
+  const coverMap = await fetchTaskCoverUrls(taskList.map((task) => task.id));
 
   stageList.forEach((stage) => {
     tasksByStage.set(stage.id, []);
@@ -620,7 +697,9 @@ async function bootstrap() {
       const doneFlag = Boolean(stageMeta.get(stage.id)?.done);
       const cards = stageTasks.length
         ? stageTasks
-            .map((task) => renderTaskCard(task, stage.id, stage.name, doneFlag))
+            .map((task) =>
+              renderTaskCard(task, stage.id, stage.name, doneFlag, coverMap.get(task.id))
+            )
             .join("")
         : '<li class="task-empty">No tasks in this stage.</li>';
 
@@ -861,6 +940,10 @@ async function bootstrap() {
 
       try {
         await persistAttachmentChanges(newTask.id, createEditor?.attachments, userId);
+        if (newCard) {
+          const coverUrl = await fetchTaskCoverUrl(newTask.id);
+          updateTaskCardCover(newCard, coverUrl, newTask.title);
+        }
       } catch (attachmentError) {
         if (messageEl) {
           messageEl.textContent =
@@ -1023,6 +1106,10 @@ async function bootstrap() {
 
       try {
         await persistAttachmentChanges(activeTaskId, editEditor?.attachments, userId);
+        if (activeTaskCard) {
+          const coverUrl = await fetchTaskCoverUrl(activeTaskId);
+          updateTaskCardCover(activeTaskCard, coverUrl, title);
+        }
       } catch (attachmentError) {
         editSubmit.disabled = false;
         editSubmit.textContent = "Save";

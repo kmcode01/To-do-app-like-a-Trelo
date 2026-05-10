@@ -89,6 +89,78 @@ async function addAttachmentPreviewUrls(attachments) {
   return enriched;
 }
 
+async function fetchTaskCoverUrls(taskIds) {
+  if (!taskIds.length) {
+    return new Map();
+  }
+
+  const { data, error } = await supabase
+    .from("task_attachments")
+    .select("task_id, file_path, file_name, mime_type, created_at")
+    .in("task_id", taskIds)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const firstImageByTask = new Map();
+  (data || []).forEach((attachment) => {
+    if (firstImageByTask.has(attachment.task_id)) {
+      return;
+    }
+
+    if (isImageAttachment(attachment.mime_type, attachment.file_name)) {
+      firstImageByTask.set(attachment.task_id, attachment);
+    }
+  });
+
+  const coverMap = new Map();
+  for (const [taskId, attachment] of firstImageByTask.entries()) {
+    const { data: signed, error: signedError } = await supabase.storage
+      .from(ATTACHMENTS_BUCKET)
+      .createSignedUrl(attachment.file_path, ATTACHMENT_PREVIEW_TTL_SECONDS);
+
+    if (!signedError && signed?.signedUrl) {
+      coverMap.set(taskId, signed.signedUrl);
+    }
+  }
+
+  return coverMap;
+}
+
+async function fetchTaskCoverUrl(taskId) {
+  const coverMap = await fetchTaskCoverUrls([taskId]);
+  return coverMap.get(taskId) || "";
+}
+
+function updateTaskCardCover(card, coverUrl, title) {
+  if (!card) {
+    return;
+  }
+
+  const existing = card.querySelector(".board-cover");
+  if (!coverUrl) {
+    if (existing) {
+      existing.remove();
+    }
+    return;
+  }
+
+  const safeCoverUrl = escapeHtml(coverUrl);
+  const safeTitle = escapeHtml(title || "Task");
+  if (existing) {
+    existing.src = coverUrl;
+    existing.alt = `${safeTitle} cover`;
+    return;
+  }
+
+  card.insertAdjacentHTML(
+    "afterbegin",
+    `<img class="board-cover" src="${safeCoverUrl}" alt="${safeTitle} cover" />`
+  );
+}
+
 async function refreshAttachmentEditor(taskId, editor) {
   if (!editor) {
     return [];
@@ -220,11 +292,14 @@ function resolveTaskStatus(task) {
   return "not_started";
 }
 
-function renderTaskCard(task, statusKey) {
+function renderTaskCard(task, statusKey, coverUrl) {
   const title = escapeHtml(task.title || "Untitled task");
   const projectTitle = escapeHtml(task.projects?.title || "Project");
   const priority = escapeHtml(task.priority || "medium");
   const descriptionText = stripHtml(task.description_html || "");
+  const coverMarkup = coverUrl
+    ? `<img class="board-cover" src="${escapeHtml(coverUrl)}" alt="${title} cover" />`
+    : "";
   const description = descriptionText
     ? `<p class="project-description">${escapeHtml(descriptionText)}</p>`
     : '<p class="project-description is-muted">No description yet.</p>';
@@ -237,6 +312,7 @@ function renderTaskCard(task, statusKey) {
 
   return `
     <li class="board-card" draggable="true" data-task-id="${task.id}" data-status="${statusKey}">
+      ${coverMarkup}
       <div class="board-card-body">
         <h3 data-task-title>${title}</h3>
         <div data-task-description>${description}</div>
@@ -500,6 +576,7 @@ async function bootstrap() {
   }
 
   const tasks = await fetchUserTasks(userId);
+  const coverMap = await fetchTaskCoverUrls(tasks.map((task) => task.id));
 
   const email = session.user?.email ?? "your account";
   const boardColumns = {
@@ -510,7 +587,7 @@ async function bootstrap() {
 
   tasks.forEach((task) => {
     const statusKey = resolveTaskStatus(task);
-    boardColumns[statusKey].push(renderTaskCard(task, statusKey));
+    boardColumns[statusKey].push(renderTaskCard(task, statusKey, coverMap.get(task.id)));
   });
 
   const columnCounts = {
@@ -773,6 +850,10 @@ async function bootstrap() {
 
       try {
         await persistAttachmentChanges(activeTaskId, editEditor?.attachments, userId);
+        if (activeTaskCard) {
+          const coverUrl = await fetchTaskCoverUrl(activeTaskId);
+          updateTaskCardCover(activeTaskCard, coverUrl, title);
+        }
       } catch (attachmentError) {
         editSubmit.disabled = false;
         editSubmit.textContent = "Save";

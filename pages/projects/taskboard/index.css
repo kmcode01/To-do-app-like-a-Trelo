@@ -98,6 +98,16 @@
   box-shadow: 0 20px 40px rgba(15, 59, 46, 0.16);
 }
 
+.task-cover {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 0.65rem;
+  margin-bottom: 0.6rem;
+  border: 1px solid #e4eee8;
+  background: #f4f8f6;
+}
+
 .task-title {
   margin: 0;
   font-size: 1rem;
