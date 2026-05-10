@@ -372,6 +372,13 @@
   border: none;
   border-radius: 0.8rem;
   padding: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.task-dialog .dialog-body {
+  max-height: min(80vh, 720px);
+  overflow: auto;
 }
 
 .task-dialog::backdrop {

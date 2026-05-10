@@ -69,19 +69,20 @@ async function addAttachmentPreviewUrls(attachments) {
   const enriched = await Promise.all(
     attachments.map(async (attachment) => {
       const isImage = isImageAttachment(attachment.mime_type, attachment.file_name);
-      if (!isImage) {
-        return { ...attachment, isImage: false, previewUrl: "" };
-      }
-
       const { data, error } = await supabase.storage
         .from(ATTACHMENTS_BUCKET)
         .createSignedUrl(attachment.file_path, ATTACHMENT_PREVIEW_TTL_SECONDS);
 
       if (error) {
-        return { ...attachment, isImage: true, previewUrl: "" };
+        return { ...attachment, isImage, previewUrl: "", downloadUrl: "" };
       }
 
-      return { ...attachment, isImage: true, previewUrl: data?.signedUrl || "" };
+      return {
+        ...attachment,
+        isImage,
+        previewUrl: isImage ? data?.signedUrl || "" : "",
+        downloadUrl: data?.signedUrl || ""
+      };
     })
   );
 

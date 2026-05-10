@@ -150,16 +150,20 @@ export function createAttachmentEditor(root) {
 
     visibleExisting.forEach((attachment) => {
       const isImage = Boolean(attachment.isImage);
-      const thumb = isImage && attachment.previewUrl
-        ? `<span class="attachment-thumb"><img src="${escapeHtml(attachment.previewUrl)}" alt="${escapeHtml(attachment.file_name)} preview" /></span>`
+      const previewUrl = attachment.previewUrl || attachment.downloadUrl || "";
+      const thumb = isImage && previewUrl
+        ? `<a class="attachment-thumb" href="${escapeHtml(previewUrl)}" target="_blank" rel="noreferrer"><img src="${escapeHtml(previewUrl)}" alt="${escapeHtml(attachment.file_name)} preview" /></a>`
         : `<span class="attachment-icon">${getFileIconMarkup()}</span>`;
+      const nameMarkup = previewUrl
+        ? `<a class="attachment-name" href="${escapeHtml(previewUrl)}" target="_blank" rel="noreferrer">${escapeHtml(attachment.file_name)}</a>`
+        : `<span class="attachment-name">${escapeHtml(attachment.file_name)}</span>`;
 
       items.push(`
         <div class="attachment-item" data-attachment-id="${escapeHtml(attachment.id)}">
           <div class="attachment-meta">
             ${thumb}
             <div class="attachment-details">
-              <span class="attachment-name">${escapeHtml(attachment.file_name)}</span>
+              ${nameMarkup}
               <span class="attachment-size">${escapeHtml(formatFileSize(attachment.size))}</span>
             </div>
           </div>
