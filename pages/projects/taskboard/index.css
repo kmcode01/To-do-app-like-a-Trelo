@@ -211,6 +211,57 @@
   flex-wrap: wrap;
 }
 
+/* Checkbox row inside dialogs */
+.task-dialog .checkbox-row,
+.dialog-body .checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.task-dialog .checkbox-row input[type="checkbox"],
+.dialog-body .checkbox-row input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+}
+
+.task-dialog .checkbox-row label,
+.dialog-body .checkbox-row label {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Segmented control for status */
+.segmented {
+  display: inline-grid;
+  grid-auto-flow: column;
+  gap: 0.25rem;
+  background: #f3f6f4;
+  padding: 0.15rem;
+  border-radius: 0.6rem;
+  align-items: center;
+}
+
+.segmented input[type="radio"] {
+  display: none;
+}
+
+.segmented label {
+  padding: 0.45rem 0.9rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: #3b4f47;
+  background: transparent;
+}
+
+.segmented input[type="radio"]:checked + label,
+.segmented label:hover {
+  background: var(--primary);
+  color: #fff;
+}
+
 @media (max-width: 960px) {
   .taskboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

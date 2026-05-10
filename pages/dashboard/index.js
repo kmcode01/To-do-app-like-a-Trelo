@@ -1,5 +1,6 @@
 import { renderFooter } from "../../components/footer/footer.js";
 import { renderHeader } from "../../components/header/header.js";
+import { createTaskEditor, renderTaskEditorDialog } from "../../components/task-editor/task-editor.js";
 import { requireAuthenticatedSession, supabase } from "../lib/supabaseClient.js";
 import "../theme.css";
 import "./index.css";
@@ -30,11 +31,156 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString();
 }
 
+const ATTACHMENTS_BUCKET = "task-attachments";
+const ATTACHMENT_PREVIEW_TTL_SECONDS = 60 * 60;
+
+function sanitizeFileName(name) {
+  return String(name || "file")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/_{2,}/g, "_")
+    .replace(/^_+/, "")
+    .slice(0, 120);
+}
+
+function isImageAttachment(mimeType, fileName) {
+  if (mimeType && mimeType.startsWith("image/")) {
+    return true;
+  }
+
+  const extension = String(fileName || "").toLowerCase().split(".").pop();
+  return ["png", "jpg", "jpeg", "webp", "gif"].includes(extension);
+}
+
+async function fetchTaskAttachments(taskId) {
+  const { data, error } = await supabase
+    .from("task_attachments")
+    .select("id, task_id, file_name, file_path, mime_type, size, created_at")
+    .eq("task_id", taskId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data || [];
+}
+
+async function addAttachmentPreviewUrls(attachments) {
+  const enriched = await Promise.all(
+    attachments.map(async (attachment) => {
+      const isImage = isImageAttachment(attachment.mime_type, attachment.file_name);
+      if (!isImage) {
+        return { ...attachment, isImage: false, previewUrl: "" };
+      }
+
+      const { data, error } = await supabase.storage
+        .from(ATTACHMENTS_BUCKET)
+        .createSignedUrl(attachment.file_path, ATTACHMENT_PREVIEW_TTL_SECONDS);
+
+      if (error) {
+        return { ...attachment, isImage: true, previewUrl: "" };
+      }
+
+      return { ...attachment, isImage: true, previewUrl: data?.signedUrl || "" };
+    })
+  );
+
+  return enriched;
+}
+
+async function refreshAttachmentEditor(taskId, editor) {
+  if (!editor) {
+    return [];
+  }
+
+  const attachments = await fetchTaskAttachments(taskId);
+  const enriched = await addAttachmentPreviewUrls(attachments);
+  editor.setExistingAttachments(enriched);
+  return enriched;
+}
+
+async function persistAttachmentChanges(taskId, editor, userId) {
+  if (!editor) {
+    return [];
+  }
+
+  const { uploads, deletions } = editor.getPendingChanges();
+  const deletionIds = deletions.map((attachment) => attachment.id);
+  const deletionPaths = deletions.map((attachment) => attachment.file_path);
+
+  if (!uploads.length && !deletionPaths.length) {
+    editor.reset();
+    return [];
+  }
+
+  if (deletionPaths.length) {
+    const { error: storageDeleteError } = await supabase.storage
+      .from(ATTACHMENTS_BUCKET)
+      .remove(deletionPaths);
+
+    if (storageDeleteError) {
+      throw new Error(storageDeleteError.message);
+    }
+
+    const { error: deleteError } = await supabase
+      .from("task_attachments")
+      .delete()
+      .in("id", deletionIds);
+
+    if (deleteError) {
+      throw new Error(deleteError.message);
+    }
+  }
+
+  if (uploads.length) {
+    const rows = [];
+    const uploadedPaths = [];
+
+    for (const upload of uploads) {
+      const safeName = sanitizeFileName(upload.file.name || "attachment");
+      const filePath = `${taskId}/${crypto.randomUUID()}-${safeName}`;
+      const { error: uploadError } = await supabase.storage
+        .from(ATTACHMENTS_BUCKET)
+        .upload(filePath, upload.file, {
+          contentType: upload.file.type || "application/octet-stream",
+          upsert: false
+        });
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+
+      uploadedPaths.push(filePath);
+
+      rows.push({
+        task_id: taskId,
+        file_name: upload.file.name,
+        file_path: filePath,
+        mime_type: upload.file.type || null,
+        size: upload.file.size || null,
+        created_by_user_id: userId
+      });
+    }
+
+    if (rows.length) {
+      const { error: insertError } = await supabase.from("task_attachments").insert(rows);
+      if (insertError) {
+        if (uploadedPaths.length) {
+          await supabase.storage.from(ATTACHMENTS_BUCKET).remove(uploadedPaths);
+        }
+        throw new Error(insertError.message);
+      }
+    }
+  }
+
+  return refreshAttachmentEditor(taskId, editor);
+}
+
 async function fetchUserTasks(userId) {
   const { data, error } = await supabase
     .from("tasks")
     .select(
-      "id, title, description_html, created_at, done, status, priority, stage_id, project_id, projects(title), project_stages(name)"
+      "id, title, description_html, created_at, done, status, priority, stage_id, project_id, projects(title), project_stages!tasks_project_stage_fk(name)"
     )
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
@@ -76,7 +222,6 @@ function resolveTaskStatus(task) {
 function renderTaskCard(task, statusKey) {
   const title = escapeHtml(task.title || "Untitled task");
   const projectTitle = escapeHtml(task.projects?.title || "Project");
-  const stageName = escapeHtml(task.project_stages?.name || "Unassigned");
   const priority = escapeHtml(task.priority || "medium");
   const descriptionText = stripHtml(task.description_html || "");
   const description = descriptionText
@@ -100,7 +245,7 @@ function renderTaskCard(task, statusKey) {
         <span class="meta-text">${projectTitle}</span>
       </div>
       <div class="board-card-meta">
-        <span class="meta-text">Stage: ${stageName}</span>
+        <span class="meta-text" data-task-stage>Stage: ${statusLabel}</span>
         <span class="meta-text" data-task-priority>Priority: ${priority}</span>
       </div>
       <div class="board-card-meta">
@@ -118,6 +263,8 @@ function renderTaskCard(task, statusKey) {
           data-task-title="${title}"
           data-task-description="${escapeHtml(descriptionText)}"
           data-task-priority="${priority}"
+          data-task-done="${task.done ? "true" : "false"}"
+          data-task-status="${escapeHtml(task.status || "")}"
         >
           Edit
         </button>
@@ -160,6 +307,48 @@ function updateCardStatus(card, statusKey) {
   pill.classList.remove("status-not_started", "status-in_progress", "status-done");
   pill.classList.add(`status-${statusKey}`);
   pill.textContent = statusLabelFor(statusKey);
+
+  const stageEl = card.querySelector("[data-task-stage]");
+  if (stageEl) {
+    stageEl.textContent = `Stage: ${statusLabelFor(statusKey)}`;
+  }
+}
+
+function moveCardToStatusColumn(card, statusKey) {
+  if (!card || !statusKey) {
+    return;
+  }
+
+  const sourceList = card.closest(".board-card-list");
+  const targetList = document.querySelector(
+    `.board-column[data-status="${statusKey}"] .board-card-list`
+  );
+
+  if (!targetList) {
+    return;
+  }
+
+  if (sourceList === targetList) {
+    updateCardStatus(card, statusKey);
+    return;
+  }
+
+  const targetEmpty = targetList.querySelector(".empty-projects");
+  if (targetEmpty) {
+    targetEmpty.remove();
+  }
+
+  targetList.prepend(card);
+  updateCardStatus(card, statusKey);
+
+  if (sourceList && !sourceList.querySelector(".board-card")) {
+    sourceList.insertAdjacentHTML(
+      "beforeend",
+      '<li class="empty-projects">No tasks in this stage.</li>'
+    );
+  }
+
+  updateColumnCounts();
 }
 
 function updateColumnCounts() {
@@ -419,32 +608,16 @@ async function bootstrap() {
       <div data-footer></div>
     </div>
 
-    <dialog class="task-dialog" data-task-edit-dialog>
-      <form class="dialog-body" data-task-edit-form method="dialog">
-        <h2>Edit task</h2>
-        <div class="field">
-          <label for="edit-task-title">Title</label>
-          <input id="edit-task-title" name="title" type="text" maxlength="140" required />
-        </div>
-        <div class="field">
-          <label for="edit-task-description">Description</label>
-          <textarea id="edit-task-description" name="description" maxlength="1000"></textarea>
-        </div>
-        <div class="field">
-          <label for="edit-task-priority">Priority</label>
-          <select id="edit-task-priority" name="priority" required>
-            <option value="low">low</option>
-            <option value="medium">medium</option>
-            <option value="high">high</option>
-          </select>
-        </div>
-        <p class="message" data-task-edit-message role="status" aria-live="polite"></p>
-        <div class="dialog-actions">
-          <button class="btn-secondary" type="button" data-task-edit-cancel>Cancel</button>
-          <button class="btn-primary" type="submit" data-task-edit-submit>Save</button>
-        </div>
-      </form>
-    </dialog>
+    ${renderTaskEditorDialog({
+      dialogAttr: "data-task-edit-dialog",
+      formAttr: "data-task-edit-form",
+      title: "Edit task",
+      submitLabel: "Save",
+      messageAttr: "data-task-edit-message",
+      submitAttr: "data-task-edit-submit",
+      cancelAttr: "data-task-edit-cancel",
+      mode: "edit"
+    })}
 
     <dialog class="task-dialog" data-task-delete-dialog>
       <div class="dialog-body">
@@ -466,59 +639,99 @@ async function bootstrap() {
   setupBoardDragAndDrop();
 
   const editDialog = document.querySelector("[data-task-edit-dialog]");
-  const editForm = document.querySelector("[data-task-edit-form]");
-  const editMessage = document.querySelector("[data-task-edit-message]");
-  const editCancel = document.querySelector("[data-task-edit-cancel]");
-  const editSubmit = document.querySelector("[data-task-edit-submit]");
+  const editEditor = editDialog ? createTaskEditor(editDialog) : null;
+  const editForm = editEditor?.form;
+  const editMessage = editEditor?.messageEl;
+  const editCancel = editEditor?.cancelButton;
+  const editSubmit = editEditor?.submitButton;
   const deleteDialog = document.querySelector("[data-task-delete-dialog]");
   const deleteMessage = document.querySelector("[data-task-delete-message]");
   const deleteCancel = document.querySelector("[data-task-delete-cancel]");
   const deleteConfirm = document.querySelector("[data-task-delete-confirm]");
-  const editTitleInput = document.querySelector("#edit-task-title");
-  const editDescriptionInput = document.querySelector("#edit-task-description");
-  const editPriorityInput = document.querySelector("#edit-task-priority");
+  const editFields = editEditor?.fields;
 
   let activeTaskId = null;
   let activeTaskCard = null;
 
   document.querySelectorAll("[data-task-edit]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       activeTaskId = button.dataset.taskId || null;
       activeTaskCard = button.closest(".board-card");
-      editTitleInput.value = button.dataset.taskTitle || "";
-      editDescriptionInput.value = button.dataset.taskDescription || "";
-      editPriorityInput.value = button.dataset.taskPriority || "medium";
-      editMessage.textContent = "";
-      editMessage.classList.remove("is-error");
+      if (editFields?.titleInput) {
+        editFields.titleInput.value = button.dataset.taskTitle || "";
+      }
+      if (editFields?.descriptionInput) {
+        editFields.descriptionInput.value = button.dataset.taskDescription || "";
+      }
+      if (editFields?.prioritySelect) {
+        editFields.prioritySelect.value = button.dataset.taskPriority || "medium";
+      }
+      if (editFields?.statusClosed && editFields?.statusOpen) {
+        const closed = button.dataset.taskDone === "true" || button.dataset.taskStatus === "done";
+        editFields.statusClosed.checked = closed;
+        editFields.statusOpen.checked = !closed;
+      }
+      if (editMessage) {
+        editMessage.textContent = "";
+        editMessage.classList.remove("is-error");
+      }
+
+      if (activeTaskId && editEditor?.attachments) {
+        try {
+          await refreshAttachmentEditor(activeTaskId, editEditor.attachments);
+        } catch (attachmentError) {
+          if (editMessage) {
+            editMessage.textContent = attachmentError.message;
+            editMessage.classList.add("is-error");
+          }
+        }
+      }
+
       editDialog.showModal();
     });
   });
 
   if (editCancel) {
     editCancel.addEventListener("click", () => {
+      if (editEditor?.attachments) {
+        editEditor.attachments.reset();
+      }
       editDialog.close();
+    });
+  }
+
+  if (editDialog && editEditor?.attachments) {
+    editDialog.addEventListener("close", () => {
+      editEditor.attachments.reset();
     });
   }
 
   if (editForm) {
     editForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      editMessage.textContent = "";
-      editMessage.classList.remove("is-error");
+      if (editMessage) {
+        editMessage.textContent = "";
+        editMessage.classList.remove("is-error");
+      }
 
       if (!activeTaskId) {
-        editMessage.textContent = "Missing task id.";
-        editMessage.classList.add("is-error");
+        if (editMessage) {
+          editMessage.textContent = "Missing task id.";
+          editMessage.classList.add("is-error");
+        }
         return;
       }
 
-      const title = editTitleInput.value.trim();
-      const description = editDescriptionInput.value.trim();
-      const priority = editPriorityInput.value;
+      const title = String(editFields?.titleInput?.value || "").trim();
+      const description = String(editFields?.descriptionInput?.value || "").trim();
+      const priority = String(editFields?.prioritySelect?.value || "medium");
+      const done = editFields?.statusClosed?.checked ?? false;
 
       if (!title) {
-        editMessage.textContent = "Title is required.";
-        editMessage.classList.add("is-error");
+        if (editMessage) {
+          editMessage.textContent = "Title is required.";
+          editMessage.classList.add("is-error");
+        }
         return;
       }
 
@@ -526,13 +739,20 @@ async function bootstrap() {
       editSubmit.textContent = "Saving...";
 
       const descriptionHtml = description ? `<p>${escapeHtml(description)}</p>` : null;
+      const editBtn = activeTaskCard ? activeTaskCard.querySelector('[data-task-edit]') : null;
+      const currentStatus = editBtn?.dataset.taskStatus || "";
+      const openStatusValue = currentStatus === "in_progress" ? "in_progress" : "todo";
+      const statusValue = done ? "done" : openStatusValue;
+
       const { error } = await supabase
         .from("tasks")
         .update({
           title,
           description_html: descriptionHtml,
           description: description || null,
-          priority
+          priority,
+          done,
+          status: statusValue
         })
         .eq("id", activeTaskId);
 
@@ -540,10 +760,30 @@ async function bootstrap() {
       editSubmit.textContent = "Save";
 
       if (error) {
-        editMessage.textContent = error.message;
-        editMessage.classList.add("is-error");
+        if (editMessage) {
+          editMessage.textContent = error.message;
+          editMessage.classList.add("is-error");
+        }
         return;
       }
+
+      editSubmit.disabled = true;
+      editSubmit.textContent = "Saving attachments...";
+
+      try {
+        await persistAttachmentChanges(activeTaskId, editEditor?.attachments, userId);
+      } catch (attachmentError) {
+        editSubmit.disabled = false;
+        editSubmit.textContent = "Save";
+        if (editMessage) {
+          editMessage.textContent = attachmentError.message;
+          editMessage.classList.add("is-error");
+        }
+        return;
+      }
+
+      editSubmit.disabled = false;
+      editSubmit.textContent = "Save";
 
       if (activeTaskCard) {
         const titleEl = activeTaskCard.querySelector("[data-task-title]");
@@ -560,6 +800,19 @@ async function bootstrap() {
         if (priorityEl) {
           priorityEl.textContent = `Priority: ${priority}`;
         }
+
+        if (editBtn) {
+          editBtn.dataset.taskDone = done ? "true" : "false";
+          editBtn.dataset.taskStatus = statusValue;
+        }
+
+        const newKey =
+          statusValue === "done"
+            ? "done"
+            : statusValue === "in_progress"
+              ? "in_progress"
+              : "not_started";
+        moveCardToStatusColumn(activeTaskCard, newKey);
       }
 
       editDialog.close();
