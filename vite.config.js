@@ -77,6 +77,7 @@ function routeAliasPlugin() {
     return decodeURIComponent(match[1]);
   };
 
+
   const notFoundPageHtml = readFileSync(resolve(__dirname, "404.html"), "utf-8");
 
   const rewriteRoutePath = (url) => {

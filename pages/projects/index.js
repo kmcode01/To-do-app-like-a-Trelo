@@ -30,11 +30,38 @@ function iconSvg(path) {
   return `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="${path}" fill="currentColor"></path></svg>`;
 }
 
-function renderPage(projects, showCreatedNotice) {
+function renderPage(projects, showCreatedNotice, rolesByProject, currentUserId) {
   const cards = projects.length
     ? projects
         .map(
-          (project) => `
+          (project) => {
+            const inferredRole = project.owner_user_id ? (project.owner_user_id === currentUserId ? "owner" : "member") : "member";
+            const role = rolesByProject?.get(project.id) || inferredRole;
+            const isOwner = role === "owner";
+            const roleLabel = role === "owner" ? "Owner" : "Member";
+
+            const actionLinks = `
+                <a class="icon-link" href="/project/${project.id}" aria-label="View project">
+                  ${iconSvg("M12 5c5.5 0 9.6 4.1 10.8 6.4.3.4.3.8 0 1.2C21.6 14.9 17.5 19 12 19S2.4 14.9 1.2 12.6a1 1 0 0 1 0-1.2C2.4 9.1 6.5 5 12 5Zm0 2.2A4.8 4.8 0 1 0 12 17a4.8 4.8 0 0 0 0-9.8Zm0 2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6")}
+                </a>
+                <a class="icon-link" href="/project/${project.id}/taskboard" aria-label="Open taskboard">
+                  ${iconSvg("M4 6h14v2H4V6Zm0 5h14v2H4v-2Zm0 5h9v2H4v-2Z")}
+                </a>
+                ${
+                  isOwner
+                    ? `
+                      <a class="icon-link" href="/project/${project.id}/edit" aria-label="Edit project">
+                        ${iconSvg("M3 17.2V21h3.8l11-11.1-3.8-3.8L3 17.2Zm17.7-10.3a1 1 0 0 0 0-1.4l-2.2-2.2a1 1 0 0 0-1.4 0l-1.7 1.7 3.8 3.8 1.5-1.9Z")}
+                      </a>
+                      <button class="icon-btn is-danger" type="button" data-delete-project-id="${project.id}" data-delete-project-title="${escapeHtml(project.title)}" aria-label="Delete project">
+                        ${iconSvg("M7 4h10l1 2h3v2H3V6h3l1-2Zm1 6h2v8H8v-8Zm6 0h2v8h-2v-8Z")}
+                      </button>
+                    `
+                    : ""
+                }
+            `;
+
+            return `
             <article class="project-card" data-project-card="${project.id}">
               <div class="project-card-body">
                 <h2>${escapeHtml(project.title)}</h2>
@@ -45,23 +72,15 @@ function renderPage(projects, showCreatedNotice) {
               <div class="project-meta">
                 <span class="meta-label">Created</span>
                 <span class="meta-value">${formatDate(project.created_at)}</span>
+                <span class="meta-label">Role</span>
+                <span class="meta-value">${roleLabel}</span>
               </div>
               <div class="project-card-actions">
-                <a class="icon-link" href="/project/${project.id}" aria-label="View project">
-                  ${iconSvg("M12 5c5.5 0 9.6 4.1 10.8 6.4.3.4.3.8 0 1.2C21.6 14.9 17.5 19 12 19S2.4 14.9 1.2 12.6a1 1 0 0 1 0-1.2C2.4 9.1 6.5 5 12 5Zm0 2.2A4.8 4.8 0 1 0 12 17a4.8 4.8 0 0 0 0-9.8Zm0 2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6")}
-                </a>
-                <a class="icon-link" href="/project/${project.id}/taskboard" aria-label="Open taskboard">
-                  ${iconSvg("M4 6h14v2H4V6Zm0 5h14v2H4v-2Zm0 5h9v2H4v-2Z")}
-                </a>
-                <a class="icon-link" href="/project/${project.id}/edit" aria-label="Edit project">
-                  ${iconSvg("M3 17.2V21h3.8l11-11.1-3.8-3.8L3 17.2Zm17.7-10.3a1 1 0 0 0 0-1.4l-2.2-2.2a1 1 0 0 0-1.4 0l-1.7 1.7 3.8 3.8 1.5-1.9Z")}
-                </a>
-                <button class="icon-btn is-danger" type="button" data-delete-project-id="${project.id}" data-delete-project-title="${escapeHtml(project.title)}" aria-label="Delete project">
-                  ${iconSvg("M7 4h10l1 2h3v2H3V6h3l1-2Zm1 6h2v8H8v-8Zm6 0h2v8h-2v-8Z")}
-                </button>
+                ${actionLinks}
               </div>
             </article>
-          `
+          `;
+          }
         )
         .join("")
     : "";
@@ -124,8 +143,7 @@ async function bootstrap() {
 
   const { data: projects, error } = await supabase
     .from("projects")
-    .select("id, title, description, created_at")
-    .eq("owner_user_id", userId)
+    .select("id, title, description, created_at, owner_user_id")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -135,8 +153,23 @@ async function bootstrap() {
   const params = new URLSearchParams(window.location.search);
   const showCreatedNotice = params.get("created") === "1";
 
+  const { data: memberships, error: membershipError } = await supabase
+    .from("project_members")
+    .select("project_id, role")
+    .eq("user_id", userId);
+
+  if (membershipError) {
+    throw new Error(membershipError.message);
+  }
+
+  const rolesByProject = new Map();
+  (memberships || []).forEach((membership) => {
+    rolesByProject.set(membership.project_id, membership.role);
+  });
+
   const safeProjects = projects ?? [];
-  renderPage(safeProjects, showCreatedNotice);
+  const currentUserId = userId;
+  renderPage(safeProjects, showCreatedNotice, rolesByProject, currentUserId);
 
   if (showCreatedNotice) {
     params.delete("created");

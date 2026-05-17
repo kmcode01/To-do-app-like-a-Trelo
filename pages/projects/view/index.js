@@ -43,6 +43,11 @@ async function bootstrap() {
     return;
   }
 
+  const userId = session.user?.id;
+  if (!userId) {
+    throw new Error("Could not resolve current user.");
+  }
+
   const params = new URLSearchParams(window.location.search);
   const projectId = getProjectIdFromPath(window.location.pathname) || params.get("id");
 
@@ -59,6 +64,8 @@ async function bootstrap() {
   if (error) {
     throw new Error(error.message);
   }
+
+  const isOwner = project.owner_user_id === userId;
 
   app.innerHTML = `
     <div class="page-shell">
@@ -87,7 +94,11 @@ async function bootstrap() {
           </div>
 
           <div class="form-actions" style="margin-top: 1rem;">
-            <a class="action-link" href="/project/${project.id}/edit">Edit</a>
+            ${
+              isOwner
+                ? `<a class="action-link" href="/project/${project.id}/edit">Edit</a>`
+                : ""
+            }
             <a class="action-link" href="/project/${project.id}/taskboard">Open Taskboard</a>
             <a class="action-link" href="/projects">Back to Projects</a>
           </div>
@@ -99,6 +110,7 @@ async function bootstrap() {
 
   renderHeader(document.querySelector("[data-header]"), "/projects");
   renderFooter(document.querySelector("[data-footer]"));
+
 }
 
 bootstrap().catch((error) => {
