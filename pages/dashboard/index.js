@@ -249,13 +249,12 @@ async function persistAttachmentChanges(taskId, editor, userId) {
   return refreshAttachmentEditor(taskId, editor);
 }
 
-async function fetchUserTasks(userId) {
+async function fetchUserTasks() {
   const { data, error } = await supabase
     .from("tasks")
     .select(
       "id, title, description_html, created_at, done, status, priority, stage_id, project_id, projects(title), project_stages!tasks_project_stage_fk(name)"
     )
-    .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -575,7 +574,7 @@ async function bootstrap() {
     throw new Error("Could not resolve the current user.");
   }
 
-  const tasks = await fetchUserTasks(userId);
+  const tasks = await fetchUserTasks();
   const coverMap = await fetchTaskCoverUrls(tasks.map((task) => task.id));
 
   const email = session.user?.email ?? "your account";

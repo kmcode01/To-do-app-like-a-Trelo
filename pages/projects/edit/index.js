@@ -156,10 +156,7 @@ async function bootstrap() {
     throw new Error(membersError.message);
   }
 
-  const { data: users, error: usersError } = await supabase
-    .from("app_users")
-    .select("id, email, display_name")
-    .order("email", { ascending: true });
+  const { data: users, error: usersError } = await supabase.rpc("list_app_users");
 
   if (usersError) {
     throw new Error(usersError.message);
