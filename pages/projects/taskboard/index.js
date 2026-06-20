@@ -2,6 +2,7 @@ import { renderFooter } from "../../../components/footer/footer.js";
 import { renderHeader } from "../../../components/header/header.js";
 import { createTaskEditor, renderTaskEditorDialog } from "../../../components/task-editor/task-editor.js";
 import { requireAuthenticatedSession, supabase } from "../../lib/supabaseClient.js";
+import { showToast } from "../../lib/toast.js";
 import "../../theme.css";
 import "../shared.css";
 import "./index.css";
@@ -31,6 +32,960 @@ function formatDate(value) {
 
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString();
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
+}
+
+function resolveDisplayName(user) {
+  if (!user) {
+    return "Unknown";
+  }
+
+  return user.display_name || user.email || "Unknown";
+}
+
+function getInitials(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "?";
+  }
+
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+function escapeRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function formatSeconds(totalSeconds) {
+  const n = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(n / 3600);
+  const m = Math.floor((n % 3600) / 60);
+  const s = n % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+const REACTION_OPTIONS = ["👍", "❤️", "🎉"];
+
+function buildMemberLabel(member) {
+  return member?.display_name || member?.email || "";
+}
+
+function extractMentions(content, members = []) {
+  const normalizedContent = String(content || "").toLowerCase();
+  const unique = new Map();
+
+  members.forEach((member) => {
+    const label = buildMemberLabel(member);
+    if (!label) {
+      return;
+    }
+
+    const token = `@${label}`.toLowerCase();
+    if (normalizedContent.includes(token)) {
+      unique.set(member.id, { mentioned_user_id: member.id, mention_text: label });
+    }
+  });
+
+  return [...unique.values()];
+}
+
+function renderCommentContent(value, mentions = []) {
+  let safe = escapeHtml(value || "").replace(/\n/g, "<br />");
+
+  if (!mentions.length) {
+    return safe;
+  }
+
+  const replacements = mentions
+    .map((mention) => {
+      const original = mention.mention_text || resolveDisplayName(mention.app_users);
+      const currentLabel = resolveDisplayName(mention.app_users) || original;
+      return {
+        original: escapeHtml(original),
+        currentLabel: escapeHtml(currentLabel)
+      };
+    })
+    .filter((item) => item.original)
+    .sort((a, b) => b.original.length - a.original.length);
+
+  replacements.forEach((item) => {
+    const pattern = new RegExp(`@${escapeRegex(item.original)}(?=\\b|$)`, "gi");
+    safe = safe.replace(
+      pattern,
+      `<span class="mention">@${item.currentLabel}</span>`
+    );
+  });
+
+  return safe;
+}
+
+function bindAutoResize(textarea) {
+  if (!textarea) {
+    return;
+  }
+
+  const resize = () => {
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 220)}px`;
+  };
+
+  textarea.addEventListener("input", resize);
+  resize();
+}
+
+function createMentionAutocomplete(inputEl, members = []) {
+  if (!inputEl) {
+    return { setMembers: () => {} };
+  }
+
+  const container = inputEl.parentElement;
+  const menu = document.createElement("div");
+  menu.className = "mention-menu";
+  menu.hidden = true;
+  menu.innerHTML = "<ul></ul>";
+  container?.appendChild(menu);
+
+  let activeIndex = 0;
+  let matches = [];
+  let lastAtIndex = -1;
+
+  const setMembers = (nextMembers = []) => {
+    members = nextMembers;
+  };
+
+  const hideMenu = () => {
+    menu.hidden = true;
+    matches = [];
+    activeIndex = 0;
+    lastAtIndex = -1;
+  };
+
+  const renderMenu = () => {
+    const list = menu.querySelector("ul");
+    if (!list) {
+      return;
+    }
+
+    if (!matches.length) {
+      hideMenu();
+      return;
+    }
+
+    list.innerHTML = matches
+      .map((member, index) => {
+        const label = buildMemberLabel(member);
+        const isActive = index === activeIndex;
+        return `
+          <li>
+            <button
+              type="button"
+              class="mention-option${isActive ? " is-active" : ""}"
+              data-mention-index="${index}"
+            >
+              ${escapeHtml(label)}
+            </button>
+          </li>
+        `;
+      })
+      .join("");
+
+    menu.hidden = false;
+  };
+
+  const updateMatches = () => {
+    const cursor = inputEl.selectionStart || 0;
+    const prefix = inputEl.value.slice(0, cursor);
+    const atIndex = prefix.lastIndexOf("@");
+    if (atIndex === -1) {
+      hideMenu();
+      return;
+    }
+
+    const before = atIndex === 0 ? "" : prefix[atIndex - 1];
+    if (before && !/\s/.test(before)) {
+      hideMenu();
+      return;
+    }
+
+    const query = prefix.slice(atIndex + 1);
+    if (query.includes("\n")) {
+      hideMenu();
+      return;
+    }
+
+    const normalized = query.toLowerCase();
+    matches = members
+      .map((member) => ({ member, label: buildMemberLabel(member) }))
+      .filter((entry) => entry.label && entry.label.toLowerCase().startsWith(normalized))
+      .map((entry) => entry.member)
+      .slice(0, 6);
+
+    activeIndex = 0;
+    lastAtIndex = atIndex;
+    renderMenu();
+  };
+
+  const applySelection = (member) => {
+    if (!member || lastAtIndex < 0) {
+      return;
+    }
+
+    const label = buildMemberLabel(member);
+    const cursor = inputEl.selectionStart || 0;
+    const before = inputEl.value.slice(0, lastAtIndex);
+    const after = inputEl.value.slice(cursor);
+    const insert = `@${label} `;
+    inputEl.value = `${before}${insert}${after}`;
+    const nextCursor = before.length + insert.length;
+    inputEl.setSelectionRange(nextCursor, nextCursor);
+    inputEl.focus();
+    hideMenu();
+    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
+  inputEl.addEventListener("input", updateMatches);
+  inputEl.addEventListener("click", updateMatches);
+  inputEl.addEventListener("keydown", (event) => {
+    if (menu.hidden || !matches.length) {
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      activeIndex = (activeIndex + 1) % matches.length;
+      renderMenu();
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      activeIndex = (activeIndex - 1 + matches.length) % matches.length;
+      renderMenu();
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === "Tab") {
+      event.preventDefault();
+      applySelection(matches[activeIndex]);
+    }
+
+    if (event.key === "Escape") {
+      hideMenu();
+    }
+  });
+
+  menu.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    const button = event.target.closest("[data-mention-index]");
+    if (!button) {
+      return;
+    }
+
+    const index = Number(button.dataset.mentionIndex);
+    const member = matches[index];
+    if (member) {
+      applySelection(member);
+    }
+  });
+
+  inputEl.addEventListener("blur", () => {
+    setTimeout(() => hideMenu(), 100);
+  });
+
+  return { setMembers };
+}
+
+const COMMENT_SELECT =
+  "id, content, project_id, task_id, author_id, created_at, updated_at, app_users (display_name, email), comment_reactions (reaction, user_id), comment_mentions (mentioned_user_id, mention_text, app_users (display_name, email))";
+
+function normalizeComment(row) {
+  const authorName = resolveDisplayName(row.app_users);
+  return {
+    ...row,
+    authorName,
+    authorInitials: getInitials(authorName),
+    reactions: row.comment_reactions || [],
+    mentions: row.comment_mentions || []
+  };
+}
+
+function renderCommentItem(comment, currentUserId, canModerate) {
+  const canEdit = comment.author_id === currentUserId;
+  const canDelete = canEdit || canModerate;
+  const updated = comment.updated_at && comment.updated_at !== comment.created_at;
+  const timeLabel = `${formatDateTime(comment.created_at)}${updated ? " (edited)" : ""}`;
+  const reactions = comment.reactions || [];
+  const reactionCounts = REACTION_OPTIONS.reduce((acc, option) => {
+    acc[option] = 0;
+    return acc;
+  }, {});
+  const userReactions = new Set();
+  reactions.forEach((reaction) => {
+    if (reactionCounts[reaction.reaction] !== undefined) {
+      reactionCounts[reaction.reaction] += 1;
+    }
+    if (reaction.user_id === currentUserId) {
+      userReactions.add(reaction.reaction);
+    }
+  });
+
+  return `
+    <li class="comment-item" data-comment-id="${comment.id}">
+      <div class="comment-meta">
+        <div class="comment-author">
+          <span class="comment-avatar" aria-hidden="true">${comment.authorInitials}</span>
+          <span>${escapeHtml(comment.authorName)}</span>
+        </div>
+        <span class="comment-time">${escapeHtml(timeLabel)}</span>
+      </div>
+      <div class="comment-body">${renderCommentContent(comment.content, comment.mentions)}</div>
+      <div class="comment-reactions" role="group" aria-label="Reactions">
+        ${REACTION_OPTIONS.map((option) => {
+          const count = reactionCounts[option];
+          const isActive = userReactions.has(option);
+          return `
+            <button
+              class="reaction-btn${isActive ? " is-active" : ""}"
+              type="button"
+              data-comment-id="${comment.id}"
+              data-reaction="${option}"
+            >
+              <span aria-hidden="true">${option}</span>
+              ${count ? `<span class="reaction-count">${count}</span>` : ""}
+            </button>
+          `;
+        }).join("")}
+      </div>
+      ${
+        canEdit || canDelete
+          ? `
+        <div class="comment-actions">
+          ${
+            canEdit
+              ? `<button class="comment-action-btn" type="button" data-comment-edit data-comment-id="${comment.id}">Edit</button>`
+              : ""
+          }
+          ${
+            canDelete
+              ? `<button class="comment-action-btn is-danger" type="button" data-comment-delete data-comment-id="${comment.id}">Delete</button>`
+              : ""
+          }
+        </div>`
+          : ""
+      }
+    </li>
+  `;
+}
+
+function createCommentManager({
+  listEl,
+  formEl,
+  inputEl,
+  messageEl,
+  submitButton,
+  cancelButton,
+  countEl,
+  currentUserId,
+  canModerate,
+  targetType
+}) {
+  let targetId = null;
+  let editingId = null;
+  let members = [];
+  const comments = new Map();
+  const mentionAutocomplete = createMentionAutocomplete(inputEl, members);
+
+  const setMessage = (text, isError = false) => {
+    if (!messageEl) {
+      return;
+    }
+
+    messageEl.textContent = text || "";
+    if (isError) {
+      messageEl.classList.add("is-error");
+    } else {
+      messageEl.classList.remove("is-error");
+    }
+  };
+
+  const setSubmitState = (loading) => {
+    if (!submitButton) {
+      return;
+    }
+
+    submitButton.disabled = loading;
+    if (loading) {
+      submitButton.textContent = "Saving...";
+      return;
+    }
+
+    submitButton.textContent = editingId ? "Update" : "Post";
+  };
+
+  const renderList = () => {
+    if (!listEl) {
+      return;
+    }
+
+    const ordered = [...comments.values()].sort(
+      (a, b) => new Date(a.created_at) - new Date(b.created_at)
+    );
+
+    listEl.innerHTML = ordered.length
+      ? ordered.map((comment) => renderCommentItem(comment, currentUserId, canModerate)).join("")
+      : '<li class="comment-empty">No comments yet.</li>';
+
+    if (countEl) {
+      countEl.textContent = String(ordered.length);
+    }
+  };
+
+  const resetForm = () => {
+    editingId = null;
+    if (inputEl) {
+      inputEl.value = "";
+      inputEl.style.height = "";
+    }
+    if (cancelButton) {
+      cancelButton.hidden = true;
+    }
+    setMessage("");
+    setSubmitState(false);
+  };
+
+  const setEditing = (comment) => {
+    editingId = comment.id;
+    if (inputEl) {
+      inputEl.value = comment.content || "";
+      inputEl.focus();
+    }
+    if (cancelButton) {
+      cancelButton.hidden = false;
+    }
+    setSubmitState(false);
+  };
+
+  const setTargetId = (id) => {
+    targetId = id;
+    resetForm();
+  };
+
+  const setMembers = (nextMembers = []) => {
+    members = nextMembers;
+    mentionAutocomplete.setMembers(nextMembers);
+  };
+
+  const setComments = (rows = []) => {
+    comments.clear();
+    rows.forEach((row) => {
+      comments.set(row.id, normalizeComment(row));
+    });
+    renderList();
+  };
+
+  const upsertComment = (row) => {
+    comments.set(row.id, normalizeComment(row));
+    renderList();
+  };
+
+  const removeComment = (id) => {
+    comments.delete(id);
+    if (editingId === id) {
+      resetForm();
+    }
+    renderList();
+  };
+
+  const persistMentions = async (commentId, mentions) => {
+    const { error: deleteError } = await supabase
+      .from("comment_mentions")
+      .delete()
+      .eq("comment_id", commentId);
+
+    if (deleteError) {
+      throw new Error(deleteError.message);
+    }
+
+    if (!mentions.length) {
+      return;
+    }
+
+    const rows = mentions.map((mention) => ({
+      comment_id: commentId,
+      mentioned_user_id: mention.mentioned_user_id,
+      mention_text: mention.mention_text
+    }));
+
+    const { error: insertError } = await supabase.from("comment_mentions").insert(rows);
+    if (insertError) {
+      throw new Error(insertError.message);
+    }
+  };
+
+  const submitComment = async (event) => {
+    if (event) {
+      event.preventDefault();
+    }
+
+    if (!targetId) {
+      setMessage("Missing comment target.", true);
+      return;
+    }
+
+    const content = String(inputEl?.value || "").trim();
+    if (!content) {
+      setMessage("Comment cannot be empty.", true);
+      return;
+    }
+
+    setMessage("");
+    setSubmitState(true);
+
+    const payload = {
+      content,
+      author_id: currentUserId,
+      project_id: targetType === "project" ? targetId : null,
+      task_id: targetType === "task" ? targetId : null
+    };
+    const mentions = extractMentions(content, members);
+
+    try {
+      if (editingId) {
+        const { error } = await supabase
+          .from("comments")
+          .update({ content })
+          .eq("id", editingId);
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        await persistMentions(editingId, mentions);
+        const refreshed = await fetchCommentById(editingId);
+        upsertComment(refreshed);
+      } else {
+        const { data, error } = await supabase
+          .from("comments")
+          .insert(payload)
+          .select("id")
+          .single();
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        if (data?.id) {
+          await persistMentions(data.id, mentions);
+          const refreshed = await fetchCommentById(data.id);
+          upsertComment(refreshed);
+        }
+      }
+
+      resetForm();
+    } catch (error) {
+      setMessage(error.message, true);
+      setSubmitState(false);
+    }
+  };
+
+  const handleListClick = async (event) => {
+    const reactionButton = event.target.closest("[data-reaction]");
+    if (reactionButton) {
+      const commentId = reactionButton.dataset.commentId;
+      const reaction = reactionButton.dataset.reaction;
+      const comment = comments.get(commentId);
+      if (!comment || !reaction) {
+        return;
+      }
+
+      const prevReactions = comment.reactions || [];
+      const hasReacted = prevReactions.some(
+        (entry) => entry.user_id === currentUserId && entry.reaction === reaction
+      );
+
+      const nextReactions = hasReacted
+        ? prevReactions.filter(
+            (r) => !(r.user_id === currentUserId && r.reaction === reaction)
+          )
+        : [...prevReactions, { user_id: currentUserId, reaction }];
+
+      comments.set(commentId, { ...comment, reactions: nextReactions });
+      renderList();
+
+      try {
+        if (hasReacted) {
+          const { error } = await supabase
+            .from("comment_reactions")
+            .delete()
+            .eq("comment_id", commentId)
+            .eq("user_id", currentUserId)
+            .eq("reaction", reaction);
+
+          if (error) {
+            throw new Error(error.message);
+          }
+        } else {
+          const { error } = await supabase.from("comment_reactions").insert({
+            comment_id: commentId,
+            user_id: currentUserId,
+            reaction
+          });
+
+          if (error) {
+            throw new Error(error.message);
+          }
+        }
+      } catch (error) {
+        comments.set(commentId, comment);
+        renderList();
+        setMessage(error.message, true);
+      }
+
+      return;
+    }
+
+    const editButton = event.target.closest("[data-comment-edit]");
+    if (editButton) {
+      const commentId = editButton.dataset.commentId;
+      const comment = comments.get(commentId);
+      if (comment) {
+        setEditing(comment);
+      }
+      return;
+    }
+
+    const deleteButton = event.target.closest("[data-comment-delete]");
+    if (!deleteButton) {
+      return;
+    }
+
+    const commentId = deleteButton.dataset.commentId;
+    const comment = comments.get(commentId);
+    if (!comment) {
+      return;
+    }
+
+    const confirmDelete = window.confirm("Delete this comment?");
+    if (!confirmDelete) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from("comments").delete().eq("id", commentId);
+      if (error) {
+        throw new Error(error.message);
+      }
+    } catch (error) {
+      setMessage(error.message, true);
+    }
+  };
+
+  if (formEl) {
+    formEl.addEventListener("submit", submitComment);
+  }
+
+  if (submitButton && !formEl) {
+    submitButton.addEventListener("click", submitComment);
+  }
+
+  if (cancelButton) {
+    cancelButton.addEventListener("click", () => resetForm());
+  }
+
+  if (listEl) {
+    listEl.addEventListener("click", handleListClick);
+  }
+
+  bindAutoResize(inputEl);
+
+  return {
+    setTargetId,
+    setMembers,
+    setComments,
+    upsertComment,
+    removeComment,
+    resetForm,
+    setMessage,
+    hasComment: (id) => comments.has(id)
+  };
+}
+
+async function fetchCommentsByProject(projectId) {
+  const { data, error } = await supabase
+    .from("comments")
+    .select(COMMENT_SELECT)
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data || [];
+}
+
+async function fetchCommentsByTask(taskId) {
+  const { data, error } = await supabase
+    .from("comments")
+    .select(COMMENT_SELECT)
+    .eq("task_id", taskId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data || [];
+}
+
+async function fetchCommentById(commentId) {
+  const { data, error } = await supabase
+    .from("comments")
+    .select(COMMENT_SELECT)
+    .eq("id", commentId)
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+function subscribeToComments({ targetType, targetId, manager }) {
+  if (!targetId) {
+    return null;
+  }
+
+  const filterKey = targetType === "project" ? "project_id" : "task_id";
+  const channel = supabase
+    .channel(`comments:${targetType}:${targetId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "comments",
+        filter: `${filterKey}=eq.${targetId}`
+      },
+      async (payload) => {
+        if (payload.eventType === "DELETE") {
+          manager.removeComment(payload.old.id);
+          return;
+        }
+
+        try {
+          const comment = await fetchCommentById(payload.new.id);
+          manager.upsertComment(comment);
+        } catch (error) {
+          manager.setMessage(error.message, true);
+        }
+      }
+    )
+    .subscribe();
+
+  return channel;
+}
+
+function subscribeToCommentReactions(manager) {
+  const channel = supabase
+    .channel(`comment-reactions:${crypto.randomUUID()}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "comment_reactions"
+      },
+      async (payload) => {
+        const commentId = payload.new?.comment_id || payload.old?.comment_id;
+        if (!commentId || !manager.hasComment(commentId)) {
+          return;
+        }
+
+        try {
+          const comment = await fetchCommentById(commentId);
+          manager.upsertComment(comment);
+        } catch (error) {
+          manager.setMessage(error.message, true);
+        }
+      }
+    )
+    .subscribe();
+
+  return channel;
+}
+
+async function fetchTaskTimerState(taskId) {
+  const { data: task, error } = await supabase
+    .from("tasks")
+    .select("id, total_tracked_seconds, timer_running, timer_started_at")
+    .eq("id", taskId)
+    .single();
+  if (error) throw new Error(error.message);
+
+  let openEntryId = null;
+  if (task.timer_running) {
+    const { data: entry } = await supabase
+      .from("task_time_entries")
+      .select("id")
+      .eq("task_id", taskId)
+      .is("ended_at", null)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .single();
+    if (entry) openEntryId = entry.id;
+  }
+
+  return { ...task, openEntryId };
+}
+
+function createTimerManager({ displayEl, toggleEl, messageEl, currentUserId }) {
+  let taskId = null;
+  let totalSeconds = 0;
+  let timerRunning = false;
+  let timerStartedAt = null;
+  let openEntryId = null;
+  let intervalId = null;
+
+  const setMessage = (text, isError = false) => {
+    if (!messageEl) return;
+    messageEl.textContent = text || "";
+    messageEl.classList.toggle("is-error", isError);
+  };
+
+  const updateDisplay = () => {
+    if (!displayEl) return;
+    const extra =
+      timerRunning && timerStartedAt
+        ? Math.floor((Date.now() - new Date(timerStartedAt).getTime()) / 1000)
+        : 0;
+    displayEl.textContent = formatSeconds(totalSeconds + extra);
+  };
+
+  const updateToggle = () => {
+    if (!toggleEl) return;
+    toggleEl.textContent = timerRunning ? "Stop timer" : "Start timer";
+    toggleEl.classList.toggle("is-running", timerRunning);
+  };
+
+  const stopInterval = () => {
+    if (intervalId !== null) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+  };
+
+  const startInterval = () => {
+    stopInterval();
+    intervalId = setInterval(updateDisplay, 1000);
+  };
+
+  const init = (state) => {
+    taskId = state.id;
+    totalSeconds = state.total_tracked_seconds || 0;
+    timerRunning = state.timer_running || false;
+    timerStartedAt = state.timer_started_at || null;
+    openEntryId = state.openEntryId || null;
+    setMessage("");
+    updateDisplay();
+    updateToggle();
+    if (timerRunning) {
+      startInterval();
+    } else {
+      stopInterval();
+    }
+  };
+
+  const cleanup = () => {
+    stopInterval();
+    taskId = null;
+    openEntryId = null;
+  };
+
+  const handleToggle = async () => {
+    if (!taskId || !toggleEl) return;
+    toggleEl.disabled = true;
+
+    if (timerRunning) {
+      const now = new Date();
+      const elapsed =
+        timerStartedAt
+          ? Math.max(0, Math.floor((now.getTime() - new Date(timerStartedAt).getTime()) / 1000))
+          : 0;
+      const newTotal = totalSeconds + elapsed;
+
+      try {
+        const { error: taskError } = await supabase
+          .from("tasks")
+          .update({ total_tracked_seconds: newTotal, timer_running: false, timer_started_at: null })
+          .eq("id", taskId);
+        if (taskError) throw new Error(taskError.message);
+
+        if (openEntryId) {
+          const { error: entryError } = await supabase
+            .from("task_time_entries")
+            .update({ ended_at: now.toISOString(), duration_seconds: elapsed })
+            .eq("id", openEntryId);
+          if (entryError) throw new Error(entryError.message);
+        }
+
+        totalSeconds = newTotal;
+        timerRunning = false;
+        timerStartedAt = null;
+        openEntryId = null;
+        stopInterval();
+        updateDisplay();
+        updateToggle();
+      } catch (err) {
+        setMessage(err.message, true);
+      }
+    } else {
+      const now = new Date();
+      try {
+        const { data: entry, error: entryError } = await supabase
+          .from("task_time_entries")
+          .insert({ task_id: taskId, user_id: currentUserId, started_at: now.toISOString() })
+          .select("id")
+          .single();
+        if (entryError) throw new Error(entryError.message);
+
+        const { error: taskError } = await supabase
+          .from("tasks")
+          .update({ timer_running: true, timer_started_at: now.toISOString() })
+          .eq("id", taskId);
+        if (taskError) throw new Error(taskError.message);
+
+        openEntryId = entry?.id || null;
+        timerRunning = true;
+        timerStartedAt = now.toISOString();
+        updateToggle();
+        startInterval();
+      } catch (err) {
+        setMessage(err.message, true);
+      }
+    }
+
+    toggleEl.disabled = false;
+  };
+
+  if (toggleEl) {
+    toggleEl.addEventListener("click", handleToggle);
+  }
+
+  return { init, cleanup };
 }
 
 function isDoneStage(name) {
@@ -323,6 +1278,13 @@ function renderTaskCard(task, stageId, stageName, doneFlag, coverUrl) {
     : '<p class="task-description">No description yet.</p>';
   const position = Number.isFinite(task.position) ? task.position : 0;
   const priority = escapeHtml(task.priority || "medium");
+  const timerRunning = Boolean(task.timer_running);
+  const timerStartedAt = task.timer_started_at || null;
+  const totalSeconds = task.total_tracked_seconds || 0;
+  const liveSeconds =
+    timerRunning && timerStartedAt
+      ? Math.floor((Date.now() - new Date(timerStartedAt).getTime()) / 1000)
+      : 0;
 
   return `
     <li class="task-card" draggable="true" data-task-id="${task.id}" data-stage-id="${stageId}" data-position="${position}">
@@ -331,7 +1293,19 @@ function renderTaskCard(task, stageId, stageName, doneFlag, coverUrl) {
       ${safeDescription}
       <div class="task-meta">
         <span class="${statusClass}">${statusLabel}</span>
+        <span class="priority-badge priority-${priority}">${priority}</span>
+      </div>
+      <div class="task-meta">
         <span class="task-meta-text">Created ${formatDate(task.created_at)}</span>
+      </div>
+      <div class="task-timer">
+        <span class="task-timer-display" data-timer-display>${formatSeconds(totalSeconds + liveSeconds)}</span>
+        <button
+          type="button"
+          class="task-timer-btn${timerRunning ? " is-running" : ""}"
+          data-timer-toggle
+          data-task-id="${task.id}"
+        >${timerRunning ? "Stop" : "Start"}</button>
       </div>
       <div class="task-actions">
         <button
@@ -593,6 +1567,37 @@ function setupTaskDragAndDrop(stageMeta, messageEl) {
 }
 
 async function bootstrap() {
+  app.innerHTML = `
+    <div class="page-shell">
+      <div class="skeleton-header-bar"></div>
+      <main class="page-content">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap">
+          <div>
+            <div class="skeleton skeleton-h1"></div>
+            <div class="skeleton skeleton-text"></div>
+          </div>
+        </div>
+        <div class="taskboard-grid">
+          <div class="skeleton-board-col">
+            <div class="skeleton skeleton-col-head"></div>
+            <div class="skeleton skeleton-board-card"></div>
+            <div class="skeleton skeleton-board-card"></div>
+            <div class="skeleton skeleton-board-card"></div>
+          </div>
+          <div class="skeleton-board-col">
+            <div class="skeleton skeleton-col-head"></div>
+            <div class="skeleton skeleton-board-card"></div>
+            <div class="skeleton skeleton-board-card"></div>
+          </div>
+          <div class="skeleton-board-col">
+            <div class="skeleton skeleton-col-head"></div>
+            <div class="skeleton skeleton-board-card"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  `;
+
   const session = await requireAuthenticatedSession("/login");
 
   if (!session) {
@@ -613,13 +1618,49 @@ async function bootstrap() {
 
   const { data: project, error: projectError } = await supabase
     .from("projects")
-    .select("id, title, description")
+    .select("id, title, description, owner_user_id")
     .eq("id", projectId)
     .single();
 
   if (projectError) {
     throw new Error(projectError.message);
   }
+
+  const isOwner = project.owner_user_id === userId;
+
+  const { data: memberRows, error: memberError } = await supabase
+    .from("project_members")
+    .select("project_id, user_id, role")
+    .eq("project_id", projectId);
+
+  if (memberError) {
+    throw new Error(memberError.message);
+  }
+
+  const memberIds = (memberRows || []).map((row) => row.user_id).filter(Boolean);
+  const membersById = new Map();
+  if (memberIds.length) {
+    const { data: userRows, error: userError } = await supabase
+      .from("app_users")
+      .select("id, display_name, email")
+      .in("id", memberIds);
+
+    if (userError) {
+      throw new Error(userError.message);
+    }
+
+    (userRows || []).forEach((user) => {
+      membersById.set(user.id, user);
+    });
+  }
+
+  const projectMembers = (memberRows || [])
+    .map((member) => ({
+      id: member.user_id,
+      role: member.role,
+      ...membersById.get(member.user_id)
+    }))
+    .filter((member) => member.id);
 
   const { data: stages, error: stageError } = await supabase
     .from("project_stages")
@@ -661,7 +1702,7 @@ async function bootstrap() {
 
   const { data: tasks, error: taskError } = await supabase
     .from("tasks")
-    .select("id, title, description_html, position, stage_id, done, status, priority, created_at")
+    .select("id, title, description_html, position, stage_id, done, status, priority, created_at, total_tracked_seconds, timer_running, timer_started_at")
     .eq("project_id", projectId)
     .order("position", { ascending: true });
 
@@ -673,6 +1714,59 @@ async function bootstrap() {
   const tasksByStage = new Map();
   const stageMeta = new Map();
   const coverMap = await fetchTaskCoverUrls(taskList.map((task) => task.id));
+
+  const taskTimers = new Map();
+  taskList.forEach((task) => {
+    taskTimers.set(task.id, {
+      totalSeconds: task.total_tracked_seconds || 0,
+      timerRunning: Boolean(task.timer_running),
+      timerStartedAt: task.timer_started_at || null,
+      intervalId: null
+    });
+  });
+
+  function stopCardTimerInterval(taskId) {
+    const state = taskTimers.get(taskId);
+    if (!state || state.intervalId === null) return;
+    clearInterval(state.intervalId);
+    state.intervalId = null;
+  }
+
+  function startCardTimerInterval(taskId) {
+    stopCardTimerInterval(taskId);
+    const state = taskTimers.get(taskId);
+    if (!state) return;
+    state.intervalId = setInterval(() => {
+      const card = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
+      const displayEl = card?.querySelector("[data-timer-display]");
+      if (!displayEl) return;
+      const extra =
+        state.timerRunning && state.timerStartedAt
+          ? Math.floor((Date.now() - new Date(state.timerStartedAt).getTime()) / 1000)
+          : 0;
+      displayEl.textContent = formatSeconds(state.totalSeconds + extra);
+    }, 1000);
+  }
+
+  function updateCardTimerUI(taskId) {
+    const state = taskTimers.get(taskId);
+    if (!state) return;
+    const card = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
+    if (!card) return;
+    const displayEl = card.querySelector("[data-timer-display]");
+    const toggleBtn = card.querySelector("[data-timer-toggle]");
+    if (displayEl) {
+      const extra =
+        state.timerRunning && state.timerStartedAt
+          ? Math.floor((Date.now() - new Date(state.timerStartedAt).getTime()) / 1000)
+          : 0;
+      displayEl.textContent = formatSeconds(state.totalSeconds + extra);
+    }
+    if (toggleBtn) {
+      toggleBtn.textContent = state.timerRunning ? "Stop" : "Start";
+      toggleBtn.classList.toggle("is-running", state.timerRunning);
+    }
+  }
 
   stageList.forEach((stage) => {
     tasksByStage.set(stage.id, []);
@@ -713,6 +1807,7 @@ async function bootstrap() {
           <ul class="task-list">
             ${cards}
           </ul>
+          <button class="column-add-btn" type="button" data-column-add-task="${stage.id}">+ Add task</button>
         </section>
       `;
     })
@@ -740,6 +1835,31 @@ async function bootstrap() {
             ? `<div class="taskboard-grid" role="list">${columns}</div>`
             : '<p class="empty-state">No stages found for this project.</p>'
         }
+
+        <section class="comment-thread" data-project-comments>
+          <div class="comment-thread-header">
+            <div>
+              <h2>Project discussion</h2>
+              <p class="message">Share updates with the team.</p>
+            </div>
+            <div class="comment-thread-controls">
+              <span class="comment-count" data-project-comment-count>0</span>
+              <button type="button" class="comment-thread-toggle" data-comment-thread-toggle>Hide</button>
+            </div>
+          </div>
+          <div class="comment-thread-body" data-comment-thread-body>
+            <ul class="comment-list" data-project-comment-list></ul>
+            <form class="comment-form" data-project-comment-form>
+              <label for="project-comment">Add a comment</label>
+              <textarea id="project-comment" name="comment" maxlength="2000" data-project-comment-input></textarea>
+              <p class="message" data-project-comment-message role="status" aria-live="polite"></p>
+              <div class="comment-actions">
+                <button class="btn-secondary" type="button" data-project-comment-cancel hidden>Cancel edit</button>
+                <button class="btn-primary" type="submit" data-project-comment-submit>Post</button>
+              </div>
+            </form>
+          </div>
+        </section>
       </main>
       <div data-footer></div>
     </div>
@@ -782,6 +1902,15 @@ async function bootstrap() {
   renderHeader(document.querySelector("[data-header]"), "/projects");
   renderFooter(document.querySelector("[data-footer]"));
 
+  const commentToggleBtn = document.querySelector("[data-comment-thread-toggle]");
+  const commentThreadSection = document.querySelector("[data-project-comments]");
+  if (commentToggleBtn && commentThreadSection) {
+    commentToggleBtn.addEventListener("click", () => {
+      const collapsed = commentThreadSection.classList.toggle("is-collapsed");
+      commentToggleBtn.textContent = collapsed ? "Show" : "Hide";
+    });
+  }
+
   const messageEl = document.querySelector("[data-taskboard-message]");
   const createButton = document.querySelector("[data-create-task]");
   const dialog = document.querySelector("[data-task-dialog]");
@@ -802,29 +1931,142 @@ async function bootstrap() {
   const deleteConfirm = document.querySelector("[data-task-delete-confirm]");
   const createFields = createEditor?.fields;
   const editFields = editEditor?.fields;
+  const projectCommentSection = document.querySelector("[data-project-comments]");
+  const projectCommentList = projectCommentSection?.querySelector("[data-project-comment-list]");
+  const projectCommentForm = projectCommentSection?.querySelector("[data-project-comment-form]");
+  const projectCommentInput = projectCommentSection?.querySelector("[data-project-comment-input]");
+  const projectCommentMessage = projectCommentSection?.querySelector("[data-project-comment-message]");
+  const projectCommentSubmit = projectCommentSection?.querySelector("[data-project-comment-submit]");
+  const projectCommentCancel = projectCommentSection?.querySelector("[data-project-comment-cancel]");
+  const projectCommentCount = projectCommentSection?.querySelector("[data-project-comment-count]");
+  const taskCommentElements = editEditor?.comments;
 
   let activeTaskId = null;
   let activeTaskCard = null;
+  let taskCommentChannel = null;
+  let projectCommentChannel = null;
+  let taskReactionChannel = null;
+  let projectReactionChannel = null;
+
+  const projectComments = projectCommentList
+    ? createCommentManager({
+        listEl: projectCommentList,
+        formEl: projectCommentForm,
+        inputEl: projectCommentInput,
+        messageEl: projectCommentMessage,
+        submitButton: projectCommentSubmit,
+        cancelButton: projectCommentCancel,
+        countEl: projectCommentCount,
+        currentUserId: userId,
+        canModerate: isOwner,
+        targetType: "project"
+      })
+    : null;
+
+  if (projectComments) {
+    projectComments.setTargetId(projectId);
+    projectComments.setMembers(projectMembers);
+    try {
+      const projectCommentRows = await fetchCommentsByProject(projectId);
+      projectComments.setComments(projectCommentRows);
+      projectCommentChannel = subscribeToComments({
+        targetType: "project",
+        targetId: projectId,
+        manager: projectComments
+      });
+      projectReactionChannel = subscribeToCommentReactions(projectComments);
+    } catch (error) {
+      projectComments.setMessage(error.message, true);
+    }
+  }
+
+  const taskComments = taskCommentElements?.listEl
+    ? createCommentManager({
+        listEl: taskCommentElements.listEl,
+        formEl: null,
+        inputEl: taskCommentElements.inputEl,
+        messageEl: taskCommentElements.messageEl,
+        submitButton: taskCommentElements.submitButton,
+        cancelButton: taskCommentElements.cancelButton,
+        countEl: taskCommentElements.countEl,
+        currentUserId: userId,
+        canModerate: isOwner,
+        targetType: "task"
+      })
+    : null;
+
+  if (taskComments) {
+    taskComments.setMembers(projectMembers);
+  }
+
+  const timerManager = editEditor?.timer
+    ? createTimerManager({
+        displayEl: editEditor.timer.display,
+        toggleEl: editEditor.timer.toggle,
+        messageEl: editEditor.timer.message,
+        currentUserId: userId
+      })
+    : null;
+
+  const loadTaskComments = async (taskId) => {
+    if (!taskComments) {
+      return;
+    }
+
+    taskComments.setTargetId(taskId);
+    taskComments.setMessage("");
+
+    try {
+      const taskCommentRows = await fetchCommentsByTask(taskId);
+      taskComments.setComments(taskCommentRows);
+    } catch (error) {
+      taskComments.setMessage(error.message, true);
+    }
+
+    if (taskCommentChannel) {
+      supabase.removeChannel(taskCommentChannel);
+    }
+
+    taskCommentChannel = subscribeToComments({
+      targetType: "task",
+      targetId: taskId,
+      manager: taskComments
+    });
+
+    if (taskReactionChannel) {
+      supabase.removeChannel(taskReactionChannel);
+    }
+
+    taskReactionChannel = subscribeToCommentReactions(taskComments);
+  };
 
   if (!stageList.length && createButton) {
     createButton.disabled = true;
   }
 
+  const openCreateDialog = (preselectedStageId) => {
+    if (!dialog) return;
+    if (formMessage) {
+      formMessage.textContent = "";
+      formMessage.classList.remove("is-error");
+    }
+    if (form) form.reset();
+    if (createEditor?.attachments) createEditor.attachments.clear();
+    if (createFields?.stageSelect && preselectedStageId) {
+      createFields.stageSelect.value = preselectedStageId;
+    }
+    dialog.showModal();
+  };
+
   if (createButton && dialog) {
-    createButton.addEventListener("click", () => {
-      if (formMessage) {
-        formMessage.textContent = "";
-        formMessage.classList.remove("is-error");
-      }
-      if (form) {
-        form.reset();
-      }
-      if (createEditor?.attachments) {
-        createEditor.attachments.clear();
-      }
-      dialog.showModal();
-    });
+    createButton.addEventListener("click", () => openCreateDialog());
   }
+
+  app.addEventListener("click", (event) => {
+    const addBtn = event.target.closest("[data-column-add-task]");
+    if (!addBtn) return;
+    openCreateDialog(addBtn.dataset.columnAddTask);
+  });
 
   if (cancelButton && dialog) {
     cancelButton.addEventListener("click", () => {
@@ -931,6 +2173,12 @@ async function bootstrap() {
       if (newCard) {
         wireTaskCard(newCard);
       }
+      taskTimers.set(newTask.id, {
+        totalSeconds: 0,
+        timerRunning: false,
+        timerStartedAt: null,
+        intervalId: null
+      });
 
       updateColumnCounts();
       messageEl.textContent = "";
@@ -954,6 +2202,7 @@ async function bootstrap() {
 
       submitButton.disabled = false;
       submitButton.textContent = "Create";
+      showToast("Task created");
       dialog.close();
       form.reset();
       if (createEditor?.attachments) {
@@ -996,22 +2245,85 @@ async function bootstrap() {
         }
       }
 
+      if (activeTaskId) {
+        await loadTaskComments(activeTaskId);
+      }
+
+      if (activeTaskId && timerManager) {
+        try {
+          const timerState = await fetchTaskTimerState(activeTaskId);
+          timerManager.init(timerState);
+        } catch (_timerErr) {
+          // non-critical
+        }
+      }
+
       editDialog.showModal();
     });
   });
 
   if (editCancel) {
     editCancel.addEventListener("click", () => {
+      if (timerManager) {
+        timerManager.cleanup();
+      }
       if (editEditor?.attachments) {
         editEditor.attachments.reset();
+      }
+      if (taskComments) {
+        taskComments.setComments([]);
+        taskComments.resetForm();
+      }
+      if (taskCommentChannel) {
+        supabase.removeChannel(taskCommentChannel);
+        taskCommentChannel = null;
+      }
+      if (taskReactionChannel) {
+        supabase.removeChannel(taskReactionChannel);
+        taskReactionChannel = null;
       }
       editDialog.close();
     });
   }
 
   if (editDialog && editEditor?.attachments) {
-    editDialog.addEventListener("close", () => {
+    editDialog.addEventListener("close", async () => {
+      if (timerManager) {
+        timerManager.cleanup();
+      }
       editEditor.attachments.reset();
+      if (taskComments) {
+        taskComments.setComments([]);
+        taskComments.resetForm();
+      }
+      if (taskCommentChannel) {
+        supabase.removeChannel(taskCommentChannel);
+        taskCommentChannel = null;
+      }
+      if (taskReactionChannel) {
+        supabase.removeChannel(taskReactionChannel);
+        taskReactionChannel = null;
+      }
+
+      // Re-sync card timer in case it was started/stopped inside the dialog
+      if (activeTaskId) {
+        try {
+          const freshState = await fetchTaskTimerState(activeTaskId);
+          const cardState = taskTimers.get(activeTaskId);
+          if (cardState) {
+            stopCardTimerInterval(activeTaskId);
+            cardState.totalSeconds = freshState.total_tracked_seconds || 0;
+            cardState.timerRunning = freshState.timer_running || false;
+            cardState.timerStartedAt = freshState.timer_started_at || null;
+            updateCardTimerUI(activeTaskId);
+            if (cardState.timerRunning) {
+              startCardTimerInterval(activeTaskId);
+            }
+          }
+        } catch (_) {
+          // non-critical
+        }
+      }
     });
   }
 
@@ -1182,6 +2494,7 @@ async function bootstrap() {
       }
 
       editDialog.close();
+      showToast("Task saved");
     });
   }
 
@@ -1231,13 +2544,112 @@ async function bootstrap() {
         }
       }
 
+      stopCardTimerInterval(activeTaskId);
+      taskTimers.delete(activeTaskId);
       updateColumnCounts();
+      showToast("Task deleted");
       deleteDialog.close();
     });
   }
 
   if (stageList.length) {
     setupTaskDragAndDrop(stageMeta, messageEl);
+  }
+
+  // Start live tick for tasks whose timers were already running on page load
+  taskTimers.forEach((state, taskId) => {
+    if (state.timerRunning) {
+      startCardTimerInterval(taskId);
+    }
+  });
+
+  // Timer Start/Stop handler — event delegation on the whole taskboard grid
+  const taskboardGrid = document.querySelector(".taskboard-grid");
+  if (taskboardGrid) {
+    taskboardGrid.addEventListener("click", async (event) => {
+      const toggleBtn = event.target.closest("[data-timer-toggle]");
+      if (!toggleBtn || toggleBtn.disabled) return;
+
+      const taskId = toggleBtn.dataset.taskId;
+      if (!taskId) return;
+
+      const state = taskTimers.get(taskId);
+      if (!state) return;
+
+      toggleBtn.disabled = true;
+
+      try {
+        if (state.timerRunning) {
+          const now = new Date();
+          const elapsed = state.timerStartedAt
+            ? Math.max(
+                0,
+                Math.floor((now.getTime() - new Date(state.timerStartedAt).getTime()) / 1000)
+              )
+            : 0;
+          const newTotal = state.totalSeconds + elapsed;
+
+          const { error: taskError } = await supabase
+            .from("tasks")
+            .update({
+              total_tracked_seconds: newTotal,
+              timer_running: false,
+              timer_started_at: null
+            })
+            .eq("id", taskId);
+          if (taskError) throw new Error(taskError.message);
+
+          const { data: openEntry } = await supabase
+            .from("task_time_entries")
+            .select("id")
+            .eq("task_id", taskId)
+            .is("ended_at", null)
+            .order("started_at", { ascending: false })
+            .limit(1)
+            .single();
+
+          if (openEntry?.id) {
+            await supabase
+              .from("task_time_entries")
+              .update({ ended_at: now.toISOString(), duration_seconds: elapsed })
+              .eq("id", openEntry.id);
+          }
+
+          stopCardTimerInterval(taskId);
+          state.totalSeconds = newTotal;
+          state.timerRunning = false;
+          state.timerStartedAt = null;
+          updateCardTimerUI(taskId);
+        } else {
+          const now = new Date();
+
+          const { data: entry, error: entryError } = await supabase
+            .from("task_time_entries")
+            .insert({ task_id: taskId, user_id: userId, started_at: now.toISOString() })
+            .select("id")
+            .single();
+          if (entryError) throw new Error(entryError.message);
+
+          const { error: taskError } = await supabase
+            .from("tasks")
+            .update({ timer_running: true, timer_started_at: now.toISOString() })
+            .eq("id", taskId);
+          if (taskError) throw new Error(taskError.message);
+
+          state.timerRunning = true;
+          state.timerStartedAt = now.toISOString();
+          updateCardTimerUI(taskId);
+          startCardTimerInterval(taskId);
+        }
+      } catch (err) {
+        if (messageEl) {
+          messageEl.textContent = err.message;
+          messageEl.classList.add("is-error");
+        }
+      }
+
+      toggleBtn.disabled = false;
+    });
   }
 }
 

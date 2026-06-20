@@ -31,3 +31,250 @@ h2,
 h3 {
   font-family: "Sora", "Manrope", sans-serif;
 }
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.skeleton {
+  background: #dceae3;
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+.skeleton-header-bar {
+  height: 60px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.skeleton-h1 {
+  height: 2.2rem;
+  width: 35%;
+  min-width: 140px;
+}
+
+.skeleton-text {
+  height: 1rem;
+  width: 28%;
+  min-width: 100px;
+  margin-top: 0.5rem;
+}
+
+.skeleton-summary-card {
+  height: 80px;
+  border-radius: 0.75rem;
+}
+
+.skeleton-board-col {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 0.9rem;
+  background: var(--surface-soft);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.skeleton-col-head {
+  height: 1.4rem;
+  width: 55%;
+}
+
+.skeleton-board-card {
+  height: 90px;
+  border-radius: 0.85rem;
+}
+
+/* Priority badges — used in both dashboard and taskboard cards */
+.priority-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  border: 1px solid transparent;
+}
+
+.priority-badge.priority-low {
+  background: #e3f5ee;
+  color: #0a654c;
+  border-color: #bfe6d6;
+}
+
+.priority-badge.priority-medium {
+  background: #fff8e6;
+  color: #7c5c00;
+  border-color: #f5dfa0;
+}
+
+.priority-badge.priority-high {
+  background: #fff0f2;
+  color: #b62541;
+  border-color: #f4bfc8;
+}
+
+/* Wider dialog for task edit mode */
+.task-dialog.task-dialog--edit {
+  width: min(720px, 96vw);
+}
+
+/* Collapsible comment thread */
+.comment-thread-body {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.comment-thread.is-collapsed .comment-thread-body {
+  display: none;
+}
+
+.comment-thread-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.comment-thread-toggle {
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text);
+  border-radius: 0.6rem;
+  padding: 0.3rem 0.7rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  font: inherit;
+}
+
+.comment-thread-toggle:hover {
+  background: #f5fbf8;
+}
+
+/* Timer row on task cards */
+.task-timer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface-soft);
+}
+
+.task-timer-display {
+  font-family: monospace;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: 0.04em;
+}
+
+.task-timer-btn {
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text);
+  border-radius: 0.55rem;
+  padding: 0.28rem 0.65rem;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.task-timer-btn:hover {
+  background: #f5fbf8;
+}
+
+.task-timer-btn.is-running {
+  border-color: #e6b5bf;
+  color: var(--danger);
+  background: #fff4f6;
+}
+
+.task-timer-btn.is-running:hover {
+  background: #ffe8ec;
+}
+
+.task-timer-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+/* ── Toast notifications ─────────────────────────────────────────────────── */
+#toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  pointer-events: none;
+  max-width: 380px;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem 0.75rem 1rem;
+  border-radius: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 20px rgba(15, 59, 46, 0.12);
+  font-size: 0.875rem;
+  font-weight: 500;
+  pointer-events: auto;
+  animation: toast-in 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.toast--success {
+  border-left: 3px solid var(--primary);
+}
+
+.toast--error {
+  border-left: 3px solid var(--danger);
+}
+
+.toast--out {
+  animation: toast-out 180ms ease forwards;
+}
+
+.toast-message {
+  flex: 1;
+  color: var(--text);
+}
+
+.toast-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0.1rem 0.2rem;
+  border-radius: 0.25rem;
+  transition: color 100ms ease;
+}
+
+.toast-close:hover {
+  color: var(--text);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(12px); }
+}

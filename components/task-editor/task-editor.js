@@ -25,9 +25,10 @@ export function renderTaskEditorDialog({
   const showStage = mode === "create";
   const showPriority = mode === "edit";
   const showStatus = mode === "edit";
+  const showComments = mode === "edit";
 
   return `
-    <dialog class="task-dialog" ${dialogAttr || ""}>
+    <dialog class="task-dialog${mode === "edit" ? " task-dialog--edit" : ""}" ${dialogAttr || ""}>
       <form class="dialog-body" data-task-editor-form ${formAttr || ""} method="dialog">
         <h2>${escapeHtml(title || "Task")}</h2>
         <div class="field">
@@ -90,6 +91,19 @@ export function renderTaskEditorDialog({
             : ""
         }
         ${
+          showStatus
+            ? `
+        <div class="timer-panel" data-task-timer>
+          <div class="timer-header">
+            <span class="timer-label">Time tracked</span>
+            <span class="timer-display" data-timer-display>00:00:00</span>
+          </div>
+          <button class="timer-btn" type="button" data-timer-toggle>Start timer</button>
+          <p class="message" data-timer-message role="status" aria-live="polite"></p>
+        </div>`
+            : ""
+        }
+        ${
           showStage
             ? `
         <div class="field">
@@ -101,6 +115,32 @@ export function renderTaskEditorDialog({
             : ""
         }
         ${renderAttachmentEditor({ inputId: `${prefix}-attachments` })}
+        ${
+          showComments
+            ? `
+        <section class="comments-panel" data-task-comments>
+          <div class="comments-header">
+            <h3>Task comments</h3>
+            <span class="comments-count" data-task-comment-count>0</span>
+          </div>
+          <ul class="comments-list" data-task-comment-list></ul>
+          <div class="comment-form" data-task-comment-form>
+            <label for="${prefix}-comment">Add a comment</label>
+            <textarea
+              id="${prefix}-comment"
+              name="comment"
+              maxlength="2000"
+              data-task-comment-input
+            ></textarea>
+            <p class="message" data-task-comment-message role="status" aria-live="polite"></p>
+            <div class="comment-actions">
+              <button class="btn-secondary" type="button" data-task-comment-cancel hidden>Cancel edit</button>
+              <button class="btn-primary" type="button" data-task-comment-submit>Post</button>
+            </div>
+          </div>
+        </section>`
+            : ""
+        }
         <p class="message" data-task-editor-message ${messageAttr || ""} role="status" aria-live="polite"></p>
         <div class="dialog-actions">
           <button class="btn-secondary" type="button" data-task-editor-cancel ${cancelAttr || ""}>
@@ -131,12 +171,41 @@ export function createTaskEditor(dialogEl) {
   const statusOpen = dialogEl.querySelector("[data-task-editor-status-open]");
   const statusClosed = dialogEl.querySelector("[data-task-editor-status-closed]");
   const attachmentRoot = dialogEl.querySelector("[data-attachment-editor]");
+  const commentRoot = dialogEl.querySelector("[data-task-comments]");
+  const commentList = dialogEl.querySelector("[data-task-comment-list]");
+  const commentForm = dialogEl.querySelector("[data-task-comment-form]");
+  const commentInput = dialogEl.querySelector("[data-task-comment-input]");
+  const commentMessage = dialogEl.querySelector("[data-task-comment-message]");
+  const commentSubmit = dialogEl.querySelector("[data-task-comment-submit]");
+  const commentCancel = dialogEl.querySelector("[data-task-comment-cancel]");
+  const commentCount = dialogEl.querySelector("[data-task-comment-count]");
 
   if (!form || !messageEl || !submitButton || !cancelButton || !titleInput || !descriptionInput) {
     throw new Error("Task editor dialog is missing required elements.");
   }
 
   const attachments = attachmentRoot ? createAttachmentEditor(attachmentRoot) : null;
+  const comments = commentRoot
+    ? {
+        root: commentRoot,
+        listEl: commentList,
+        formEl: commentForm,
+        inputEl: commentInput,
+        messageEl: commentMessage,
+        submitButton: commentSubmit,
+        cancelButton: commentCancel,
+        countEl: commentCount
+      }
+    : null;
+
+  const timerRoot = dialogEl.querySelector("[data-task-timer]");
+  const timer = timerRoot
+    ? {
+        display: timerRoot.querySelector("[data-timer-display]"),
+        toggle: timerRoot.querySelector("[data-timer-toggle]"),
+        message: timerRoot.querySelector("[data-timer-message]")
+      }
+    : null;
 
   return {
     form,
@@ -151,6 +220,8 @@ export function createTaskEditor(dialogEl) {
       statusOpen,
       statusClosed
     },
-    attachments
+    attachments,
+    comments,
+    timer
   };
 }

@@ -1,6 +1,7 @@
 import { renderFooter } from "../../components/footer/footer.js";
 import { renderHeader } from "../../components/header/header.js";
 import { requireAuthenticatedSession, supabase } from "../lib/supabaseClient.js";
+import { showToast } from "../lib/toast.js";
 import "../theme.css";
 import "./shared.css";
 
@@ -233,7 +234,8 @@ async function bootstrap() {
 
     pendingDelete = null;
     dialog.close();
-    window.location.reload();
+    showToast("Project deleted");
+    setTimeout(() => window.location.reload(), 1200);
   });
 }
 

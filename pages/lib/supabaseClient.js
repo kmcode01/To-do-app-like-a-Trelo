@@ -7,6 +7,37 @@ const supabaseAnonKey =
 const configErrorMessage =
   "Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env, then restart Vite.";
 
+function decodeJwtRole(token) {
+  if (!token) {
+    return null;
+  }
+
+  const [, payload] = token.split(".");
+  if (!payload) {
+    return null;
+  }
+
+  try {
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const json = atob(normalized);
+    const claims = JSON.parse(json);
+    return claims?.role || null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function assertAnonKey(key) {
+  const role = decodeJwtRole(key);
+  if (role && role !== "anon") {
+    throw new Error(
+      "Invalid Supabase key for the browser. Use the anon key (role=anon), not the service role key."
+    );
+  }
+}
+
+assertAnonKey(supabaseAnonKey);
+
 export const supabase =
   supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey, {
