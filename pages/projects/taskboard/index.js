@@ -764,6 +764,20 @@ async function fetchCommentById(commentId) {
   return data;
 }
 
+async function fetchChecklistItems(taskId) {
+  const { data, error } = await supabase
+    .from("task_checklist_items")
+    .select("id, task_id, text, checked, position, created_at")
+    .eq("task_id", taskId)
+    .order("position", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data || [];
+}
+
 function subscribeToComments({ targetType, targetId, manager }) {
   if (!targetId) {
     return null;
@@ -826,6 +840,169 @@ function subscribeToCommentReactions(manager) {
     .subscribe();
 
   return channel;
+}
+
+function createChecklistManager({ listEl, inputEl, addBtnEl, progressEl, barFillEl }) {
+  let taskId = null;
+  const items = new Map();
+
+  const updateProgress = () => {
+    const all = [...items.values()];
+    const total = all.length;
+    const checked = all.filter((i) => i.checked).length;
+    if (progressEl) progressEl.textContent = `${checked} / ${total}`;
+    if (barFillEl) barFillEl.style.width = total > 0 ? `${Math.round((checked / total) * 100)}%` : "0%";
+  };
+
+  const renderList = () => {
+    if (!listEl) return;
+    const ordered = [...items.values()].sort((a, b) => a.position - b.position);
+    listEl.innerHTML = ordered.length
+      ? ordered
+          .map(
+            (item) => `
+          <li class="checklist-item" data-item-id="${item.id}">
+            <input
+              type="checkbox"
+              ${item.checked ? "checked" : ""}
+              data-checklist-toggle
+              data-item-id="${item.id}"
+              aria-label="${escapeHtml(item.text)}"
+            />
+            <span class="checklist-item-text${item.checked ? " is-checked" : ""}">${escapeHtml(item.text)}</span>
+            <button type="button" class="checklist-item-delete" data-checklist-delete data-item-id="${item.id}" aria-label="Delete item">&times;</button>
+          </li>
+        `
+          )
+          .join("")
+      : '<li class="checklist-empty">No items yet. Add one below.</li>';
+    updateProgress();
+  };
+
+  const setItems = (rows = []) => {
+    items.clear();
+    rows.forEach((row) => items.set(row.id, row));
+    renderList();
+  };
+
+  const setTaskId = (id) => {
+    taskId = id;
+    setItems([]);
+  };
+
+  const getChecklistCounts = () => {
+    const all = [...items.values()];
+    return { total: all.length, checked: all.filter((i) => i.checked).length };
+  };
+
+  const handleToggle = async (itemId) => {
+    const item = items.get(itemId);
+    if (!item) return;
+    const nextChecked = !item.checked;
+    items.set(itemId, { ...item, checked: nextChecked });
+    renderList();
+    const { error } = await supabase
+      .from("task_checklist_items")
+      .update({ checked: nextChecked })
+      .eq("id", itemId);
+    if (error) {
+      items.set(itemId, item);
+      renderList();
+    }
+  };
+
+  const handleDelete = async (itemId) => {
+    const item = items.get(itemId);
+    if (!item) return;
+    items.delete(itemId);
+    renderList();
+    const { error } = await supabase
+      .from("task_checklist_items")
+      .delete()
+      .eq("id", itemId);
+    if (error) {
+      items.set(itemId, item);
+      renderList();
+    }
+  };
+
+  const handleAdd = async () => {
+    if (!inputEl) return;
+    const text = String(inputEl.value || "").trim();
+    if (!text || !taskId) return;
+    inputEl.disabled = true;
+    if (addBtnEl) addBtnEl.disabled = true;
+    const position = items.size;
+    try {
+      const { data, error } = await supabase
+        .from("task_checklist_items")
+        .insert({ task_id: taskId, text, position })
+        .select("id, task_id, text, checked, position, created_at")
+        .single();
+      if (error) throw new Error(error.message);
+      items.set(data.id, data);
+      inputEl.value = "";
+      renderList();
+    } catch (_) {
+      // silent — user can retry
+    }
+    inputEl.disabled = false;
+    if (addBtnEl) addBtnEl.disabled = false;
+    inputEl.focus();
+  };
+
+  if (listEl) {
+    listEl.addEventListener("click", (event) => {
+      const toggleEl = event.target.closest("[data-checklist-toggle]");
+      if (toggleEl) {
+        handleToggle(toggleEl.dataset.itemId);
+        return;
+      }
+      const deleteEl = event.target.closest("[data-checklist-delete]");
+      if (deleteEl) {
+        handleDelete(deleteEl.dataset.itemId);
+      }
+    });
+  }
+
+  if (addBtnEl) {
+    addBtnEl.addEventListener("click", handleAdd);
+  }
+
+  if (inputEl) {
+    inputEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        handleAdd();
+      }
+    });
+  }
+
+  return { setTaskId, setItems, getChecklistCounts };
+}
+
+function updateTaskCardChecklistBadge(card, counts) {
+  if (!card) return;
+  const existing = card.querySelector("[data-checklist-badge]");
+  if (!counts || counts.total === 0) {
+    if (existing) existing.remove();
+    return;
+  }
+  const isComplete = counts.checked === counts.total;
+  const className = `checklist-badge${isComplete ? " is-complete" : ""}`;
+  const content = `☑ ${counts.checked}/${counts.total}`;
+  if (existing) {
+    existing.className = className;
+    existing.textContent = content;
+  } else {
+    const meta = card.querySelector(".task-meta");
+    if (meta) {
+      meta.insertAdjacentHTML(
+        "beforeend",
+        `<span class="${className}" data-checklist-badge>${content}</span>`
+      );
+    }
+  }
 }
 
 async function fetchTaskTimerState(taskId) {
@@ -1265,7 +1442,7 @@ async function persistAttachmentChanges(taskId, editor, userId) {
   return refreshAttachmentEditor(taskId, editor);
 }
 
-function renderTaskCard(task, stageId, stageName, doneFlag, coverUrl) {
+function renderTaskCard(task, stageId, stageName, doneFlag, coverUrl, checklistCounts = null) {
   const description = stripHtml(task.description_html || "");
   const statusClass = doneFlag ? "task-status is-done" : "task-status";
   const statusLabel = formatStageLabel(stageName, doneFlag);
@@ -1286,6 +1463,11 @@ function renderTaskCard(task, stageId, stageName, doneFlag, coverUrl) {
       ? Math.floor((Date.now() - new Date(timerStartedAt).getTime()) / 1000)
       : 0;
 
+  const checklistBadge =
+    checklistCounts && checklistCounts.total > 0
+      ? `<span class="checklist-badge${checklistCounts.checked === checklistCounts.total ? " is-complete" : ""}" data-checklist-badge>☑ ${checklistCounts.checked}/${checklistCounts.total}</span>`
+      : "";
+
   return `
     <li class="task-card" draggable="true" data-task-id="${task.id}" data-stage-id="${stageId}" data-position="${position}">
       ${coverMarkup}
@@ -1294,6 +1476,7 @@ function renderTaskCard(task, stageId, stageName, doneFlag, coverUrl) {
       <div class="task-meta">
         <span class="${statusClass}">${statusLabel}</span>
         <span class="priority-badge priority-${priority}">${priority}</span>
+        ${checklistBadge}
       </div>
       <div class="task-meta">
         <span class="task-meta-text">Created ${formatDate(task.created_at)}</span>
@@ -1320,6 +1503,15 @@ function renderTaskCard(task, stageId, stageName, doneFlag, coverUrl) {
           data-task-status="${escapeHtml(task.status || "")}"
         >
           Edit
+        </button>
+        <button
+          type="button"
+          class="task-action-btn"
+          data-task-open-checklist
+          data-task-id="${task.id}"
+          data-task-title="${safeTitle}"
+        >
+          Checklist
         </button>
         <button
           type="button"
@@ -1715,6 +1907,20 @@ async function bootstrap() {
   const stageMeta = new Map();
   const coverMap = await fetchTaskCoverUrls(taskList.map((task) => task.id));
 
+  const checklistCountMap = new Map();
+  if (taskList.length) {
+    const { data: clData } = await supabase
+      .from("task_checklist_items")
+      .select("task_id, checked")
+      .in("task_id", taskList.map((t) => t.id));
+    (clData || []).forEach((row) => {
+      const entry = checklistCountMap.get(row.task_id) || { total: 0, checked: 0 };
+      entry.total++;
+      if (row.checked) entry.checked++;
+      checklistCountMap.set(row.task_id, entry);
+    });
+  }
+
   const taskTimers = new Map();
   taskList.forEach((task) => {
     taskTimers.set(task.id, {
@@ -1792,7 +1998,7 @@ async function bootstrap() {
       const cards = stageTasks.length
         ? stageTasks
             .map((task) =>
-              renderTaskCard(task, stage.id, stage.name, doneFlag, coverMap.get(task.id))
+              renderTaskCard(task, stage.id, stage.name, doneFlag, coverMap.get(task.id), checklistCountMap.get(task.id))
             )
             .join("")
         : '<li class="task-empty">No tasks in this stage.</li>';
@@ -1886,6 +2092,34 @@ async function bootstrap() {
       cancelAttr: "data-task-edit-cancel",
       mode: "edit"
     })}
+
+    <dialog class="task-dialog checklist-dialog" data-checklist-dialog>
+      <div class="dialog-body">
+        <h2 class="checklist-dialog-title" data-checklist-dialog-title>Checklist</h2>
+        <section class="checklist-panel" data-task-checklist>
+          <div class="checklist-header">
+            <span class="checklist-progress-text" data-checklist-progress>0 / 0</span>
+          </div>
+          <div class="checklist-bar">
+            <div class="checklist-bar-fill" data-checklist-bar-fill style="width: 0%"></div>
+          </div>
+          <ul class="checklist-list" data-checklist-list></ul>
+          <div class="checklist-add">
+            <input
+              type="text"
+              placeholder="Add an item..."
+              maxlength="200"
+              data-checklist-input
+              autocomplete="off"
+            />
+            <button type="button" class="checklist-add-btn" data-checklist-add>Add</button>
+          </div>
+        </section>
+        <div class="dialog-actions">
+          <button class="btn-secondary" type="button" data-checklist-dialog-close>Close</button>
+        </div>
+      </div>
+    </dialog>
 
     <dialog class="task-dialog" data-task-delete-dialog>
       <div class="dialog-body">
@@ -2005,6 +2239,20 @@ async function bootstrap() {
         toggleEl: editEditor.timer.toggle,
         messageEl: editEditor.timer.message,
         currentUserId: userId
+      })
+    : null;
+
+  const checklistDialog = document.querySelector("[data-checklist-dialog]");
+  const checklistDialogTitle = checklistDialog?.querySelector("[data-checklist-dialog-title]");
+  const checklistDialogClose = checklistDialog?.querySelector("[data-checklist-dialog-close]");
+  const checklistDialogRoot = checklistDialog?.querySelector("[data-task-checklist]");
+  const checklistManager = checklistDialogRoot
+    ? createChecklistManager({
+        listEl: checklistDialogRoot.querySelector("[data-checklist-list]"),
+        inputEl: checklistDialogRoot.querySelector("[data-checklist-input]"),
+        addBtnEl: checklistDialogRoot.querySelector("[data-checklist-add]"),
+        progressEl: checklistDialogRoot.querySelector("[data-checklist-progress]"),
+        barFillEl: checklistDialogRoot.querySelector("[data-checklist-bar-fill]")
       })
     : null;
 
@@ -2304,7 +2552,6 @@ async function bootstrap() {
         supabase.removeChannel(taskReactionChannel);
         taskReactionChannel = null;
       }
-
       // Re-sync card timer in case it was started/stopped inside the dialog
       if (activeTaskId) {
         try {
@@ -2549,6 +2796,41 @@ async function bootstrap() {
       updateColumnCounts();
       showToast("Task deleted");
       deleteDialog.close();
+    });
+  }
+
+  // Checklist dialog — open via event delegation (works for all cards incl. newly created)
+  let checklistActiveCard = null;
+  app.addEventListener("click", async (event) => {
+    const btn = event.target.closest("[data-task-open-checklist]");
+    if (!btn) return;
+    const taskId = btn.dataset.taskId || null;
+    const title = btn.dataset.taskTitle || "Checklist";
+    checklistActiveCard = btn.closest(".task-card");
+    if (checklistDialogTitle) checklistDialogTitle.textContent = title;
+    if (checklistManager && taskId) {
+      checklistManager.setTaskId(taskId);
+      try {
+        const items = await fetchChecklistItems(taskId);
+        checklistManager.setItems(items);
+      } catch (_) {
+        // non-critical
+      }
+    }
+    checklistDialog?.showModal();
+  });
+
+  if (checklistDialogClose) {
+    checklistDialogClose.addEventListener("click", () => checklistDialog?.close());
+  }
+
+  if (checklistDialog) {
+    checklistDialog.addEventListener("close", () => {
+      if (checklistManager) {
+        updateTaskCardChecklistBadge(checklistActiveCard, checklistManager.getChecklistCounts());
+        checklistManager.setTaskId(null);
+      }
+      checklistActiveCard = null;
     });
   }
 

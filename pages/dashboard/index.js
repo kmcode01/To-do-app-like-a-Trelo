@@ -754,6 +754,169 @@ async function fetchCommentById(commentId) {
   return data;
 }
 
+async function fetchChecklistItems(taskId) {
+  const { data, error } = await supabase
+    .from("task_checklist_items")
+    .select("id, task_id, text, checked, position, created_at")
+    .eq("task_id", taskId)
+    .order("position", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+function createChecklistManager({ listEl, inputEl, addBtnEl, progressEl, barFillEl }) {
+  let taskId = null;
+  let items = [];
+
+  function renderItems() {
+    if (!listEl) return;
+    if (!items.length) {
+      listEl.innerHTML = '<li class="checklist-empty">No items yet.</li>';
+      return;
+    }
+    listEl.innerHTML = items
+      .map(
+        (item) => `
+      <li class="checklist-item" data-checklist-item-id="${item.id}">
+        <label class="checklist-item-label">
+          <input type="checkbox" class="checklist-item-check" ${item.checked ? "checked" : ""} />
+          <span class="checklist-item-text${item.checked ? " is-checked" : ""}">${escapeHtml(item.text)}</span>
+        </label>
+        <button type="button" class="checklist-item-delete" aria-label="Delete item">&times;</button>
+      </li>`
+      )
+      .join("");
+  }
+
+  function updateProgress() {
+    const total = items.length;
+    const checked = items.filter((i) => i.checked).length;
+    if (progressEl) progressEl.textContent = total ? `${checked} / ${total}` : "0 / 0";
+    if (barFillEl) barFillEl.style.width = total ? `${Math.round((checked / total) * 100)}%` : "0%";
+  }
+
+  function setItems(rows) {
+    items = rows || [];
+    renderItems();
+    updateProgress();
+  }
+
+  function setTaskId(id) {
+    taskId = id;
+    items = [];
+    if (inputEl) inputEl.value = "";
+    renderItems();
+    updateProgress();
+  }
+
+  function getChecklistCounts() {
+    return { total: items.length, checked: items.filter((i) => i.checked).length };
+  }
+
+  async function handleAdd() {
+    if (!taskId || !inputEl) return;
+    const text = inputEl.value.trim();
+    if (!text) return;
+    const position = items.length;
+    const optimistic = {
+      id: crypto.randomUUID(),
+      task_id: taskId,
+      text,
+      checked: false,
+      position,
+      created_at: new Date().toISOString()
+    };
+    items.push(optimistic);
+    inputEl.value = "";
+    renderItems();
+    updateProgress();
+    const { data, error } = await supabase
+      .from("task_checklist_items")
+      .insert({ task_id: taskId, text, position })
+      .select("id, task_id, text, checked, position, created_at")
+      .single();
+    if (error) {
+      items = items.filter((i) => i.id !== optimistic.id);
+      renderItems();
+      updateProgress();
+    } else if (data) {
+      const idx = items.findIndex((i) => i.id === optimistic.id);
+      if (idx !== -1) items[idx] = data;
+      renderItems();
+      updateProgress();
+    }
+  }
+
+  if (listEl) {
+    listEl.addEventListener("click", async (e) => {
+      const itemEl = e.target.closest("[data-checklist-item-id]");
+      if (!itemEl) return;
+      const id = itemEl.dataset.checklistItemId;
+      if (e.target.classList.contains("checklist-item-check")) {
+        const checked = e.target.checked;
+        const item = items.find((i) => i.id === id);
+        if (!item) return;
+        const prev = item.checked;
+        item.checked = checked;
+        renderItems();
+        updateProgress();
+        const { error } = await supabase.from("task_checklist_items").update({ checked }).eq("id", id);
+        if (error) {
+          item.checked = prev;
+          renderItems();
+          updateProgress();
+        }
+      } else if (e.target.classList.contains("checklist-item-delete")) {
+        const idx = items.findIndex((i) => i.id === id);
+        if (idx === -1) return;
+        const removed = items.splice(idx, 1)[0];
+        renderItems();
+        updateProgress();
+        const { error } = await supabase.from("task_checklist_items").delete().eq("id", id);
+        if (error) {
+          items.splice(idx, 0, removed);
+          renderItems();
+          updateProgress();
+        }
+      }
+    });
+  }
+
+  if (addBtnEl) {
+    addBtnEl.addEventListener("click", handleAdd);
+  }
+
+  if (inputEl) {
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleAdd();
+      }
+    });
+  }
+
+  return { setTaskId, setItems, getChecklistCounts };
+}
+
+function updateTaskCardChecklistBadge(card, counts) {
+  if (!card) return;
+  const existing = card.querySelector("[data-checklist-badge]");
+  if (!counts || counts.total === 0) {
+    if (existing) existing.remove();
+    return;
+  }
+  const isComplete = counts.checked === counts.total;
+  const className = `checklist-badge${isComplete ? " is-complete" : ""}`;
+  const content = `☑ ${counts.checked}/${counts.total}`;
+  if (existing) {
+    existing.className = className;
+    existing.textContent = content;
+  } else {
+    const meta = card.querySelector(".board-card-meta");
+    if (meta) meta.insertAdjacentHTML("beforeend", `<span class="${className}" data-checklist-badge>${content}</span>`);
+  }
+}
+
 function subscribeToComments({ targetType, targetId, manager }) {
   if (!targetId) {
     return null;
@@ -1238,7 +1401,7 @@ function resolveTaskStatus(task) {
   return "not_started";
 }
 
-function renderTaskCard(task, statusKey, coverUrl) {
+function renderTaskCard(task, statusKey, coverUrl, checklistCounts = null) {
   const title = escapeHtml(task.title || "Untitled task");
   const projectTitle = escapeHtml(task.projects?.title || "Project");
   const priority = escapeHtml(task.priority || "medium");
@@ -1262,6 +1425,10 @@ function renderTaskCard(task, statusKey, coverUrl) {
       : statusKey === "in_progress"
         ? "In Progress"
         : "Not Started";
+  const checklistBadge =
+    checklistCounts && checklistCounts.total > 0
+      ? `<span class="checklist-badge${checklistCounts.checked === checklistCounts.total ? " is-complete" : ""}" data-checklist-badge>☑ ${checklistCounts.checked}/${checklistCounts.total}</span>`
+      : "";
 
   return `
     <li class="board-card" draggable="true" data-task-id="${task.id}" data-status="${statusKey}">
@@ -1277,6 +1444,7 @@ function renderTaskCard(task, statusKey, coverUrl) {
       <div class="board-card-meta">
         <span class="priority-badge priority-${priority}" data-task-priority>${priority}</span>
         <span class="meta-text">Created ${formatDate(task.created_at)}</span>
+        ${checklistBadge}
       </div>
       <div class="task-timer">
         <span class="task-timer-display" data-timer-display>${formatSeconds(totalSeconds + liveSeconds)}</span>
@@ -1302,6 +1470,15 @@ function renderTaskCard(task, statusKey, coverUrl) {
           data-task-status="${escapeHtml(task.status || "")}"
         >
           Edit
+        </button>
+        <button
+          type="button"
+          class="project-action-btn project-action-secondary"
+          data-task-open-checklist
+          data-task-id="${task.id}"
+          data-task-title="${title}"
+        >
+          Checklist
         </button>
         <button
           type="button"
@@ -1567,6 +1744,20 @@ async function bootstrap() {
   const tasks = await fetchUserTasks();
   const coverMap = await fetchTaskCoverUrls(tasks.map((task) => task.id));
 
+  const checklistCountMap = new Map();
+  if (tasks.length) {
+    const { data: clData } = await supabase
+      .from("task_checklist_items")
+      .select("task_id, checked")
+      .in("task_id", tasks.map((t) => t.id));
+    (clData || []).forEach((row) => {
+      const entry = checklistCountMap.get(row.task_id) || { total: 0, checked: 0 };
+      entry.total++;
+      if (row.checked) entry.checked++;
+      checklistCountMap.set(row.task_id, entry);
+    });
+  }
+
   const projectIds = [...new Set(tasks.map((task) => task.project_id).filter(Boolean))];
   const ownersByProject = new Map();
   if (projectIds.length) {
@@ -1626,7 +1817,9 @@ async function bootstrap() {
 
   tasks.forEach((task) => {
     const statusKey = resolveTaskStatus(task);
-    boardColumns[statusKey].push(renderTaskCard(task, statusKey, coverMap.get(task.id)));
+    boardColumns[statusKey].push(
+      renderTaskCard(task, statusKey, coverMap.get(task.id), checklistCountMap.get(task.id) || null)
+    );
   });
 
   const columnCounts = {
@@ -1739,6 +1932,30 @@ async function bootstrap() {
         <div class="dialog-actions">
           <button class="btn-secondary" type="button" data-task-delete-cancel>Cancel</button>
           <button class="btn-danger" type="button" data-task-delete-confirm>Delete</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="checklist-dialog" data-checklist-dialog>
+      <div class="checklist-panel">
+        <div class="checklist-header">
+          <h2 class="checklist-dialog-title" data-checklist-dialog-title>Checklist</h2>
+          <button type="button" class="btn-secondary" data-checklist-dialog-close>Close</button>
+        </div>
+        <div class="checklist-progress-text" data-checklist-progress>0 / 0</div>
+        <div class="checklist-bar">
+          <div class="checklist-bar-fill" data-checklist-bar-fill style="width:0%"></div>
+        </div>
+        <ul class="checklist-list" data-checklist-list></ul>
+        <div class="checklist-add">
+          <input
+            type="text"
+            class="checklist-add-input"
+            placeholder="Add an item…"
+            maxlength="200"
+            data-checklist-input
+          />
+          <button type="button" class="checklist-add-btn" data-checklist-add-btn>Add</button>
         </div>
       </div>
     </dialog>
@@ -1933,6 +2150,52 @@ async function bootstrap() {
         currentUserId: userId
       })
     : null;
+
+  const checklistDialog = document.querySelector("[data-checklist-dialog]");
+  const checklistDialogTitle = document.querySelector("[data-checklist-dialog-title]");
+  const checklistDialogClose = document.querySelector("[data-checklist-dialog-close]");
+  const checklistManager = checklistDialog
+    ? createChecklistManager({
+        listEl: checklistDialog.querySelector("[data-checklist-list]"),
+        inputEl: checklistDialog.querySelector("[data-checklist-input]"),
+        addBtnEl: checklistDialog.querySelector("[data-checklist-add-btn]"),
+        progressEl: checklistDialog.querySelector("[data-checklist-progress]"),
+        barFillEl: checklistDialog.querySelector("[data-checklist-bar-fill]")
+      })
+    : null;
+
+  let checklistActiveCard = null;
+
+  app.addEventListener("click", async (event) => {
+    const btn = event.target.closest("[data-task-open-checklist]");
+    if (!btn) return;
+    const taskId = btn.dataset.taskId || null;
+    const title = btn.dataset.taskTitle || "Checklist";
+    checklistActiveCard = btn.closest(".board-card");
+    if (checklistDialogTitle) checklistDialogTitle.textContent = title;
+    if (checklistManager && taskId) {
+      checklistManager.setTaskId(taskId);
+      try {
+        const items = await fetchChecklistItems(taskId);
+        checklistManager.setItems(items);
+      } catch (_) {}
+    }
+    checklistDialog?.showModal();
+  });
+
+  if (checklistDialogClose) {
+    checklistDialogClose.addEventListener("click", () => checklistDialog?.close());
+  }
+
+  if (checklistDialog) {
+    checklistDialog.addEventListener("close", () => {
+      if (checklistActiveCard && checklistManager) {
+        updateTaskCardChecklistBadge(checklistActiveCard, checklistManager.getChecklistCounts());
+      }
+      checklistManager?.setTaskId(null);
+      checklistActiveCard = null;
+    });
+  }
 
   const loadTaskComments = async (taskId, projectId) => {
     if (!taskComments) {

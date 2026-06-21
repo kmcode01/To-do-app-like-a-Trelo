@@ -533,6 +533,183 @@
   background: #eef7f2;
 }
 
+/* Checklist panel */
+.checklist-dialog {
+  width: min(420px, 92vw);
+}
+
+.checklist-dialog-title {
+  margin: 0 0 0.25rem;
+}
+
+.checklist-panel {
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  background: var(--surface-soft);
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.checklist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.checklist-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.checklist-progress-text {
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.checklist-bar {
+  height: 6px;
+  background: #e0ece5;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.checklist-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+  transition: width 200ms ease;
+}
+
+.checklist-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.5rem;
+  transition: background 120ms ease;
+}
+
+.checklist-item:hover {
+  background: #eef7f2;
+}
+
+.checklist-item input[type="checkbox"] {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.checklist-item-text {
+  flex: 1;
+  font-size: 0.92rem;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.checklist-item-text.is-checked {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.checklist-item-delete {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.4rem;
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+.checklist-item:hover .checklist-item-delete {
+  opacity: 1;
+}
+
+.checklist-item-delete:hover {
+  color: var(--danger);
+}
+
+.checklist-empty {
+  font-size: 0.88rem;
+  color: var(--muted);
+  padding: 0.35rem 0.5rem;
+}
+
+.checklist-add {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.checklist-add input {
+  flex: 1;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  background: var(--surface);
+}
+
+.checklist-add-btn {
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: #fff;
+  border-radius: 0.65rem;
+  padding: 0.45rem 0.9rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.checklist-add-btn:hover {
+  background: #0a7a5e;
+  border-color: #0a7a5e;
+}
+
+.checklist-add-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Task card badge */
+.checklist-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: #f0f7f4;
+  border: 1px solid #d4e9df;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+}
+
+.checklist-badge.is-complete {
+  color: var(--primary);
+  background: #e3f5ee;
+  border-color: #bfe6d6;
+}
+
 /* Checkbox row inside dialogs */
 .task-dialog .checkbox-row,
 .dialog-body .checkbox-row {
