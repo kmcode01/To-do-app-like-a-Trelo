@@ -67,6 +67,33 @@ function escapeRegex(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function resolveDeadlineState(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const deadlineDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((deadlineDay - today) / 86400000);
+  if (diffDays < 0) return { label: `Overdue ${Math.abs(diffDays)}d`, state: "overdue" };
+  if (diffDays === 0) return { label: "Due today", state: "today" };
+  if (diffDays <= 3) return { label: `Due in ${diffDays}d`, state: "soon" };
+  return { label: date.toLocaleDateString(), state: "ok" };
+}
+
+function toDateInputValue(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+}
+
+function updateDeadlineHint(dateValue, hintEl) {
+  if (!hintEl) return;
+  const info = resolveDeadlineState(dateValue);
+  hintEl.textContent = info ? info.label : "";
+  hintEl.className = `deadline-hint${info ? ` is-${info.state}` : ""}`;
+}
+
 function formatSeconds(totalSeconds) {
   const n = Math.max(0, Math.floor(totalSeconds));
   const h = Math.floor(n / 3600);
@@ -1363,7 +1390,7 @@ async function fetchUserTasks() {
   const { data, error } = await supabase
     .from("tasks")
     .select(
-      "id, title, description_html, created_at, done, status, priority, stage_id, project_id, total_tracked_seconds, timer_running, timer_started_at, projects(title), project_stages!tasks_project_stage_fk(name)"
+      "id, title, description_html, created_at, done, status, priority, deadline, stage_id, project_id, total_tracked_seconds, timer_running, timer_started_at, projects(title), project_stages!tasks_project_stage_fk(name)"
     )
     .order("created_at", { ascending: false });
 
@@ -1430,6 +1457,11 @@ function renderTaskCard(task, statusKey, coverUrl, checklistCounts = null) {
       ? `<span class="checklist-badge${checklistCounts.checked === checklistCounts.total ? " is-complete" : ""}" data-checklist-badge>☑ ${checklistCounts.checked}/${checklistCounts.total}</span>`
       : "";
 
+  const deadlineInfo = resolveDeadlineState(task.deadline);
+  const deadlineBadge = deadlineInfo
+    ? `<span class="deadline-badge is-${deadlineInfo.state}" data-deadline-badge>📅 ${deadlineInfo.label}</span>`
+    : "";
+
   return `
     <li class="board-card" draggable="true" data-task-id="${task.id}" data-status="${statusKey}">
       ${coverMarkup}
@@ -1445,6 +1477,7 @@ function renderTaskCard(task, statusKey, coverUrl, checklistCounts = null) {
         <span class="priority-badge priority-${priority}" data-task-priority>${priority}</span>
         <span class="meta-text">Created ${formatDate(task.created_at)}</span>
         ${checklistBadge}
+        ${deadlineBadge}
       </div>
       <div class="task-timer">
         <span class="task-timer-display" data-timer-display>${formatSeconds(totalSeconds + liveSeconds)}</span>
@@ -1468,6 +1501,7 @@ function renderTaskCard(task, statusKey, coverUrl, checklistCounts = null) {
           data-task-priority="${priority}"
           data-task-done="${task.done ? "true" : "false"}"
           data-task-status="${escapeHtml(task.status || "")}"
+          data-task-deadline="${escapeHtml(task.deadline || "")}"
         >
           Edit
         </button>
@@ -2151,6 +2185,12 @@ async function bootstrap() {
       })
     : null;
 
+  if (editEditor?.fields?.deadlineInput) {
+    editEditor.fields.deadlineInput.addEventListener("change", () => {
+      updateDeadlineHint(editEditor.fields.deadlineInput.value, editEditor.fields.deadlineHint);
+    });
+  }
+
   const checklistDialog = document.querySelector("[data-checklist-dialog]");
   const checklistDialogTitle = document.querySelector("[data-checklist-dialog-title]");
   const checklistDialogClose = document.querySelector("[data-checklist-dialog-close]");
@@ -2231,56 +2271,60 @@ async function bootstrap() {
     taskReactionChannel = subscribeToCommentReactions(taskComments);
   };
 
-  document.querySelectorAll("[data-task-edit]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      activeTaskId = button.dataset.taskId || null;
-      activeTaskCard = button.closest(".board-card");
-      const activeProjectId = button.dataset.taskProjectId || null;
-      if (editFields?.titleInput) {
-        editFields.titleInput.value = button.dataset.taskTitle || "";
-      }
-      if (editFields?.descriptionInput) {
-        editFields.descriptionInput.value = button.dataset.taskDescription || "";
-      }
-      if (editFields?.prioritySelect) {
-        editFields.prioritySelect.value = button.dataset.taskPriority || "medium";
-      }
-      if (editFields?.statusClosed && editFields?.statusOpen) {
-        const closed = button.dataset.taskDone === "true" || button.dataset.taskStatus === "done";
-        editFields.statusClosed.checked = closed;
-        editFields.statusOpen.checked = !closed;
-      }
-      if (editMessage) {
-        editMessage.textContent = "";
-        editMessage.classList.remove("is-error");
-      }
+  app.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-task-edit]");
+    if (!button) return;
+    activeTaskId = button.dataset.taskId || null;
+    activeTaskCard = button.closest(".board-card");
+    const activeProjectId = button.dataset.taskProjectId || null;
+    if (editFields?.titleInput) {
+      editFields.titleInput.value = button.dataset.taskTitle || "";
+    }
+    if (editFields?.descriptionInput) {
+      editFields.descriptionInput.value = button.dataset.taskDescription || "";
+    }
+    if (editFields?.prioritySelect) {
+      editFields.prioritySelect.value = button.dataset.taskPriority || "medium";
+    }
+    if (editFields?.statusClosed && editFields?.statusOpen) {
+      const closed = button.dataset.taskDone === "true" || button.dataset.taskStatus === "done";
+      editFields.statusClosed.checked = closed;
+      editFields.statusOpen.checked = !closed;
+    }
+    if (editFields?.deadlineInput) {
+      editFields.deadlineInput.value = toDateInputValue(button.dataset.taskDeadline || "");
+      updateDeadlineHint(editFields.deadlineInput.value, editFields.deadlineHint);
+    }
+    if (editMessage) {
+      editMessage.textContent = "";
+      editMessage.classList.remove("is-error");
+    }
 
-      if (activeTaskId && editEditor?.attachments) {
-        try {
-          await refreshAttachmentEditor(activeTaskId, editEditor.attachments);
-        } catch (attachmentError) {
-          if (editMessage) {
-            editMessage.textContent = attachmentError.message;
-            editMessage.classList.add("is-error");
-          }
+    if (activeTaskId && editEditor?.attachments) {
+      try {
+        await refreshAttachmentEditor(activeTaskId, editEditor.attachments);
+      } catch (attachmentError) {
+        if (editMessage) {
+          editMessage.textContent = attachmentError.message;
+          editMessage.classList.add("is-error");
         }
       }
+    }
 
-      if (activeTaskId && activeProjectId) {
-        await loadTaskComments(activeTaskId, activeProjectId);
+    if (activeTaskId && activeProjectId) {
+      await loadTaskComments(activeTaskId, activeProjectId);
+    }
+
+    if (activeTaskId && timerManager) {
+      try {
+        const timerState = await fetchTaskTimerState(activeTaskId);
+        timerManager.init(timerState);
+      } catch (_timerErr) {
+        // non-critical
       }
+    }
 
-      if (activeTaskId && timerManager) {
-        try {
-          const timerState = await fetchTaskTimerState(activeTaskId);
-          timerManager.init(timerState);
-        } catch (_timerErr) {
-          // non-critical
-        }
-      }
-
-      editDialog.showModal();
-    });
+    editDialog.showModal();
   });
 
   if (editCancel) {
@@ -2365,6 +2409,8 @@ async function bootstrap() {
       const description = String(editFields?.descriptionInput?.value || "").trim();
       const priority = String(editFields?.prioritySelect?.value || "medium");
       const done = editFields?.statusClosed?.checked ?? false;
+      const deadlineRaw = editFields?.deadlineInput?.value || "";
+      const deadline = deadlineRaw ? new Date(deadlineRaw).toISOString() : null;
 
       if (!title) {
         if (editMessage) {
@@ -2390,6 +2436,7 @@ async function bootstrap() {
           description_html: descriptionHtml,
           description: description || null,
           priority,
+          deadline,
           done,
           status: statusValue
         })
@@ -2448,6 +2495,21 @@ async function bootstrap() {
         if (editBtn) {
           editBtn.dataset.taskDone = done ? "true" : "false";
           editBtn.dataset.taskStatus = statusValue;
+          editBtn.dataset.taskDeadline = deadline || "";
+        }
+
+        const existingDeadlineBadge = activeTaskCard.querySelector("[data-deadline-badge]");
+        const deadlineInfo = resolveDeadlineState(deadline);
+        if (deadlineInfo) {
+          const badgeHtml = `<span class="deadline-badge is-${deadlineInfo.state}" data-deadline-badge>📅 ${deadlineInfo.label}</span>`;
+          if (existingDeadlineBadge) {
+            existingDeadlineBadge.outerHTML = badgeHtml;
+          } else {
+            const metaRow = activeTaskCard.querySelectorAll(".board-card-meta")[1];
+            if (metaRow) metaRow.insertAdjacentHTML("beforeend", badgeHtml);
+          }
+        } else if (existingDeadlineBadge) {
+          existingDeadlineBadge.remove();
         }
 
         const newKey =
@@ -2464,13 +2526,13 @@ async function bootstrap() {
     });
   }
 
-  document.querySelectorAll("[data-task-delete]").forEach((button) => {
-    button.addEventListener("click", () => {
-      activeTaskId = button.dataset.taskId || null;
-      activeTaskCard = button.closest(".board-card");
-      deleteMessage.textContent = "Are you sure you want to delete this task?";
-      deleteDialog.showModal();
-    });
+  app.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-task-delete]");
+    if (!button) return;
+    activeTaskId = button.dataset.taskId || null;
+    activeTaskCard = button.closest(".board-card");
+    deleteMessage.textContent = "Are you sure you want to delete this task?";
+    deleteDialog.showModal();
   });
 
   if (deleteCancel) {
@@ -2517,6 +2579,127 @@ async function bootstrap() {
       deleteDialog.close();
     });
   }
+
+  // ── Real-time task sync ──────────────────────────────────────────────────
+  supabase
+    .channel(`tasks:dashboard:${userId}`)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks" }, async (payload) => {
+      const taskId = payload.new?.id;
+      if (!taskId) return;
+      if (document.querySelector(`.board-card[data-task-id="${taskId}"]`)) return;
+
+      const { data: task, error } = await supabase
+        .from("tasks")
+        .select("id, title, description_html, created_at, done, status, priority, deadline, stage_id, project_id, total_tracked_seconds, timer_running, timer_started_at, projects(title), project_stages!tasks_project_stage_fk(name)")
+        .eq("id", taskId)
+        .single();
+
+      if (error || !task) return;
+
+      const statusKey = resolveTaskStatus(task);
+      const targetList = document.querySelector(`.board-column[data-status="${statusKey}"] .board-card-list`);
+      if (!targetList) return;
+
+      taskTimers.set(task.id, {
+        totalSeconds: task.total_tracked_seconds || 0,
+        timerRunning: Boolean(task.timer_running),
+        timerStartedAt: task.timer_started_at || null,
+        intervalId: null
+      });
+      if (Boolean(task.timer_running)) startCardTimerInterval(task.id);
+
+      const empty = targetList.querySelector(".empty-projects");
+      if (empty) empty.remove();
+      targetList.insertAdjacentHTML("beforeend", renderTaskCard(task, statusKey, null, null));
+      updateColumnCounts();
+      showToast("New task added");
+    })
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "tasks" }, (payload) => {
+      const task = payload.new;
+      if (!task?.id) return;
+
+      const card = document.querySelector(`.board-card[data-task-id="${task.id}"]`);
+      if (!card) return;
+
+      const titleEl = card.querySelector("[data-task-title]");
+      if (titleEl) titleEl.textContent = task.title || "Untitled task";
+
+      const descText = stripHtml(task.description_html || "");
+      const descEl = card.querySelector("[data-task-description]");
+      if (descEl) {
+        descEl.innerHTML = descText
+          ? `<p class="project-description">${escapeHtml(descText)}</p>`
+          : '<p class="project-description is-muted">No description yet.</p>';
+      }
+
+      const priorityEl = card.querySelector("[data-task-priority]");
+      if (priorityEl) {
+        const priority = task.priority || "medium";
+        priorityEl.textContent = priority;
+        priorityEl.className = `priority-badge priority-${priority}`;
+      }
+
+      const existingDeadlineBadge = card.querySelector("[data-deadline-badge]");
+      const deadlineInfo = resolveDeadlineState(task.deadline);
+      if (deadlineInfo) {
+        const badgeHtml = `<span class="deadline-badge is-${deadlineInfo.state}" data-deadline-badge>📅 ${deadlineInfo.label}</span>`;
+        if (existingDeadlineBadge) {
+          existingDeadlineBadge.outerHTML = badgeHtml;
+        } else {
+          const metaRow = card.querySelectorAll(".board-card-meta")[1];
+          if (metaRow) metaRow.insertAdjacentHTML("beforeend", badgeHtml);
+        }
+      } else if (existingDeadlineBadge) {
+        existingDeadlineBadge.remove();
+      }
+
+      const editBtn = card.querySelector("[data-task-edit]");
+      if (editBtn) {
+        const safeTitle = escapeHtml(task.title || "Untitled task");
+        editBtn.dataset.taskTitle = safeTitle;
+        editBtn.dataset.taskDescription = escapeHtml(stripHtml(task.description_html || ""));
+        editBtn.dataset.taskPriority = task.priority || "medium";
+        editBtn.dataset.taskDone = task.done ? "true" : "false";
+        editBtn.dataset.taskStatus = task.status || "";
+        editBtn.dataset.taskDeadline = task.deadline || "";
+      }
+
+      const newTimerRunning = Boolean(task.timer_running);
+      const timerState = taskTimers.get(task.id);
+      if (timerState && timerState.timerRunning !== newTimerRunning) {
+        stopCardTimerInterval(task.id);
+        timerState.totalSeconds = task.total_tracked_seconds || 0;
+        timerState.timerRunning = newTimerRunning;
+        timerState.timerStartedAt = task.timer_started_at || null;
+        updateCardTimerUI(task.id);
+        if (newTimerRunning) startCardTimerInterval(task.id);
+      }
+
+      const newStatusKey = resolveTaskStatus(task);
+      const currentColumn = card.closest(".board-column");
+      if (currentColumn?.dataset.status !== newStatusKey) {
+        moveCardToStatusColumn(card, newStatusKey);
+      }
+    })
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "tasks" }, (payload) => {
+      const taskId = payload.old?.id;
+      if (!taskId) return;
+
+      const card = document.querySelector(`.board-card[data-task-id="${taskId}"]`);
+      if (!card) return;
+
+      stopCardTimerInterval(taskId);
+      taskTimers.delete(taskId);
+
+      const list = card.closest(".board-card-list");
+      card.remove();
+      if (list && !list.querySelector(".board-card")) {
+        list.insertAdjacentHTML("beforeend", '<li class="empty-projects">No tasks yet. Create one in your taskboard.</li>');
+      }
+      updateColumnCounts();
+    })
+    .subscribe();
+  // ── End real-time task sync ──────────────────────────────────────────────
 
 }
 

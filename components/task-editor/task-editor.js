@@ -93,13 +93,25 @@ export function renderTaskEditorDialog({
         ${
           showStatus
             ? `
-        <div class="timer-panel" data-task-timer>
-          <div class="timer-header">
-            <span class="timer-label">Time tracked</span>
-            <span class="timer-display" data-timer-display>00:00:00</span>
+        <div class="task-timing-grid">
+          <div class="timer-panel" data-task-timer>
+            <div class="timer-header">
+              <span class="timer-label">Time tracked</span>
+              <span class="timer-display" data-timer-display>00:00:00</span>
+            </div>
+            <button class="timer-btn" type="button" data-timer-toggle>Start timer</button>
+            <p class="message" data-timer-message role="status" aria-live="polite"></p>
           </div>
-          <button class="timer-btn" type="button" data-timer-toggle>Start timer</button>
-          <p class="message" data-timer-message role="status" aria-live="polite"></p>
+          <div class="deadline-panel">
+            <div class="deadline-label">Deadline</div>
+            <input
+              type="date"
+              id="${prefix}-deadline"
+              class="deadline-input"
+              data-task-editor-deadline
+            />
+            <p class="deadline-hint" data-task-editor-deadline-hint></p>
+          </div>
         </div>`
             : ""
         }
@@ -170,6 +182,8 @@ export function createTaskEditor(dialogEl) {
   const prioritySelect = dialogEl.querySelector("[data-task-editor-priority]");
   const statusOpen = dialogEl.querySelector("[data-task-editor-status-open]");
   const statusClosed = dialogEl.querySelector("[data-task-editor-status-closed]");
+  const deadlineInput = dialogEl.querySelector("[data-task-editor-deadline]");
+  const deadlineHint = dialogEl.querySelector("[data-task-editor-deadline-hint]");
   const attachmentRoot = dialogEl.querySelector("[data-attachment-editor]");
   const commentRoot = dialogEl.querySelector("[data-task-comments]");
   const commentList = dialogEl.querySelector("[data-task-comment-list]");
@@ -218,7 +232,9 @@ export function createTaskEditor(dialogEl) {
       stageSelect,
       prioritySelect,
       statusOpen,
-      statusClosed
+      statusClosed,
+      deadlineInput,
+      deadlineHint
     },
     attachments,
     comments,

@@ -1067,3 +1067,90 @@
   color: #0a654c;
   border-color: #bfe6d6;
 }
+
+/* ── Task timing grid (timer + deadline side-by-side) ────────────────────── */
+
+.task-timing-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.deadline-panel {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  background: var(--surface-soft);
+}
+
+.deadline-label {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.deadline-input {
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  padding: 0.4rem 0.6rem;
+  font: inherit;
+  font-size: 0.9rem;
+  background: var(--surface);
+  color: var(--text);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.deadline-input:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.deadline-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  min-height: 1.2em;
+}
+
+.deadline-hint.is-overdue { color: var(--danger); }
+.deadline-hint.is-soon    { color: #c47d00; }
+.deadline-hint.is-today   { color: #c47d00; }
+.deadline-hint.is-ok      { color: #0a654c; }
+
+/* ── Deadline badge on board cards ──────────────────────────────────────── */
+
+.deadline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.77rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 0.18rem 0.5rem;
+  border: 1px solid transparent;
+  background: #f0f5f2;
+  color: var(--muted);
+}
+
+.deadline-badge.is-overdue {
+  background: #fff0f3;
+  color: var(--danger);
+  border-color: #f5c2cc;
+}
+
+.deadline-badge.is-today,
+.deadline-badge.is-soon {
+  background: #fff8e1;
+  color: #c47d00;
+  border-color: #ffe082;
+}
+
+.deadline-badge.is-ok {
+  background: #e8f5ee;
+  color: #0a654c;
+  border-color: #bfe0d0;
+}
