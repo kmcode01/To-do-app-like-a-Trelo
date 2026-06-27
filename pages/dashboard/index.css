@@ -168,8 +168,9 @@
 
 .board-cover {
   width: 100%;
-  height: 140px;
+  height: 110px;
   object-fit: cover;
+  object-position: top center;
   border-radius: 0.65rem;
   margin-bottom: 0.6rem;
   border: 1px solid #e4eee8;
@@ -188,7 +189,7 @@
 
 .board-card-body {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.25rem;
 }
 
 .project-description {
@@ -214,13 +215,23 @@
 }
 
 .board-actions {
-  margin-top: 0.85rem;
+  margin-top: 0.65rem;
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
 }
 
 .board-actions .project-action-btn {
   min-width: auto;
-  padding: 0.55rem 0.85rem;
-  font-size: 0.92rem;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 999px;
+  letter-spacing: 0.01em;
+}
+
+.board-actions .project-action-btn:hover {
+  transform: none;
 }
 
 .project-action-btn {
@@ -327,6 +338,48 @@
 
 .actions-row .secondary-link {
   margin-top: 0;
+}
+
+.board-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.board-card-header h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.board-card-badges {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding-top: 0.1rem;
+}
+
+.board-card-info {
+  margin-top: 0.45rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.board-card-project {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.board-card-dot {
+  color: var(--border);
+  line-height: 1;
 }
 
 .board-card-meta {
@@ -751,6 +804,7 @@
   padding: 0.15rem;
   border-radius: 0.6rem;
   align-items: center;
+  width: fit-content;
 }
 
 .segmented input[type="radio"] {
@@ -903,6 +957,54 @@
 
   .board-grid {
     grid-template-columns: 1fr;
+  }
+
+  .projects-heading-row {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .projects-heading-row .secondary-link {
+    justify-content: center;
+  }
+
+  .projects-heading-row .board-search-input {
+    text-align: center;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger,
+  .secondary-link,
+  .action-link {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 768px) {
+
+  .task-dialog {
+    width: 96vw;
+  }
+
+  .task-dialog.task-dialog--edit {
+    width: 96vw;
+  }
+
+  .dialog-body {
+    padding: 0.75rem;
+  }
+
+  .dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .dialog-actions .btn-primary,
+  .dialog-actions .btn-secondary,
+  .dialog-actions .btn-danger {
+    width: 100%;
+    min-width: 0;
   }
 }
 
@@ -1174,4 +1276,10 @@
   background: #e8f5ee;
   color: #0a654c;
   border-color: #bfe0d0;
+}
+
+@media (max-width: 768px) {
+  .task-timing-grid {
+    grid-template-columns: 1fr;
+  }
 }

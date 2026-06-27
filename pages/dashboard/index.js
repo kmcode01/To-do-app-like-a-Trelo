@@ -939,7 +939,7 @@ function updateTaskCardChecklistBadge(card, counts) {
     existing.className = className;
     existing.textContent = content;
   } else {
-    const meta = card.querySelector(".board-card-meta");
+    const meta = card.querySelector(".board-card-info");
     if (meta) meta.insertAdjacentHTML("beforeend", `<span class="${className}" data-checklist-badge>${content}</span>`);
   }
 }
@@ -1466,15 +1466,18 @@ function renderTaskCard(task, statusKey, coverUrl, checklistCounts = null) {
     <li class="board-card" draggable="true" data-task-id="${task.id}" data-status="${statusKey}">
       ${coverMarkup}
       <div class="board-card-body">
-        <h3 data-task-title>${title}</h3>
+        <div class="board-card-header">
+          <h3 data-task-title>${title}</h3>
+          <div class="board-card-badges">
+            <span class="status-pill status-${statusKey}">${statusLabel}</span>
+            <span class="priority-badge priority-${priority}" data-task-priority>${priority}</span>
+          </div>
+        </div>
         <div data-task-description>${description}</div>
       </div>
-      <div class="board-card-meta">
-        <span class="status-pill status-${statusKey}">${statusLabel}</span>
-        <span class="meta-text">${projectTitle}</span>
-      </div>
-      <div class="board-card-meta">
-        <span class="priority-badge priority-${priority}" data-task-priority>${priority}</span>
+      <div class="board-card-info">
+        <span class="board-card-project" data-task-project>${projectTitle}</span>
+        <span class="board-card-dot">·</span>
         <span class="meta-text">Created ${formatDate(task.created_at)}</span>
         ${checklistBadge}
         ${deadlineBadge}
@@ -1740,7 +1743,7 @@ function filterBoard(query) {
     }
     const title = (card.querySelector("[data-task-title]")?.textContent || "").toLowerCase();
     const desc = (card.querySelector("[data-task-description]")?.textContent || "").toLowerCase();
-    const project = (card.querySelectorAll(".meta-text")[0]?.textContent || "").toLowerCase();
+    const project = (card.querySelector("[data-task-project]")?.textContent || "").toLowerCase();
     const priority = (card.querySelector("[data-task-priority]")?.textContent || "").toLowerCase();
     card.hidden = !(title.includes(normalized) || desc.includes(normalized) || project.includes(normalized) || priority.includes(normalized));
   });
@@ -1999,7 +2002,10 @@ async function bootstrap() {
 
     <dialog class="task-dialog" data-task-delete-dialog>
       <div class="dialog-body">
-        <h2>Delete task</h2>
+        <div class="dialog-title-row">
+          <h2>Delete task</h2>
+          <button class="dialog-close-btn" type="button" aria-label="Close" data-dialog-close>✕</button>
+        </div>
         <p data-task-delete-message>Are you sure you want to delete this task?</p>
         <div class="dialog-actions">
           <button class="btn-secondary" type="button" data-task-delete-cancel>Cancel</button>
@@ -2012,7 +2018,7 @@ async function bootstrap() {
       <div class="checklist-panel">
         <div class="checklist-header">
           <h2 class="checklist-dialog-title" data-checklist-dialog-title>Checklist</h2>
-          <button type="button" class="btn-secondary" data-checklist-dialog-close>Close</button>
+          <button type="button" class="dialog-close-btn" aria-label="Close" data-dialog-close>✕</button>
         </div>
         <div class="checklist-progress-text" data-checklist-progress>0 / 0</div>
         <div class="checklist-bar">
@@ -2035,6 +2041,17 @@ async function bootstrap() {
 
   renderHeader(document.querySelector("[data-header]"), "/dashboard");
   renderFooter(document.querySelector("[data-footer]"));
+
+  // Generic X-button close — routes to the dialog's existing cancel/close button
+  document.addEventListener("click", (event) => {
+    const xBtn = event.target.closest("[data-dialog-close]");
+    if (!xBtn) return;
+    const dlg = xBtn.closest("dialog");
+    if (!dlg) return;
+    const cancelBtn = dlg.querySelector("[data-task-editor-cancel], [data-task-delete-cancel]");
+    if (cancelBtn) cancelBtn.click();
+    else dlg.close();
+  });
 
   setupBoardDragAndDrop();
 
@@ -2236,7 +2253,6 @@ async function bootstrap() {
 
   const checklistDialog = document.querySelector("[data-checklist-dialog]");
   const checklistDialogTitle = document.querySelector("[data-checklist-dialog-title]");
-  const checklistDialogClose = document.querySelector("[data-checklist-dialog-close]");
   const checklistManager = checklistDialog
     ? createChecklistManager({
         listEl: checklistDialog.querySelector("[data-checklist-list]"),
@@ -2265,10 +2281,6 @@ async function bootstrap() {
     }
     checklistDialog?.showModal();
   });
-
-  if (checklistDialogClose) {
-    checklistDialogClose.addEventListener("click", () => checklistDialog?.close());
-  }
 
   if (checklistDialog) {
     checklistDialog.addEventListener("close", () => {
@@ -2548,7 +2560,7 @@ async function bootstrap() {
           if (existingDeadlineBadge) {
             existingDeadlineBadge.outerHTML = badgeHtml;
           } else {
-            const metaRow = activeTaskCard.querySelectorAll(".board-card-meta")[1];
+            const metaRow = activeTaskCard.querySelector(".board-card-info");
             if (metaRow) metaRow.insertAdjacentHTML("beforeend", badgeHtml);
           }
         } else if (existingDeadlineBadge) {
@@ -2689,7 +2701,7 @@ async function bootstrap() {
         if (existingDeadlineBadge) {
           existingDeadlineBadge.outerHTML = badgeHtml;
         } else {
-          const metaRow = card.querySelectorAll(".board-card-meta")[1];
+          const metaRow = card.querySelector(".board-card-info");
           if (metaRow) metaRow.insertAdjacentHTML("beforeend", badgeHtml);
         }
       } else if (existingDeadlineBadge) {

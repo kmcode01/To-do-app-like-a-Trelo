@@ -2129,7 +2129,10 @@ async function bootstrap() {
 
     <dialog class="task-dialog checklist-dialog" data-checklist-dialog>
       <div class="dialog-body">
-        <h2 class="checklist-dialog-title" data-checklist-dialog-title>Checklist</h2>
+        <div class="dialog-title-row">
+          <h2 class="checklist-dialog-title" data-checklist-dialog-title>Checklist</h2>
+          <button class="dialog-close-btn" type="button" aria-label="Close" data-dialog-close>✕</button>
+        </div>
         <section class="checklist-panel" data-task-checklist>
           <div class="checklist-header">
             <span class="checklist-progress-text" data-checklist-progress>0 / 0</span>
@@ -2149,15 +2152,15 @@ async function bootstrap() {
             <button type="button" class="checklist-add-btn" data-checklist-add>Add</button>
           </div>
         </section>
-        <div class="dialog-actions">
-          <button class="btn-secondary" type="button" data-checklist-dialog-close>Close</button>
-        </div>
       </div>
     </dialog>
 
     <dialog class="task-dialog" data-task-delete-dialog>
       <div class="dialog-body">
-        <h2>Delete task</h2>
+        <div class="dialog-title-row">
+          <h2>Delete task</h2>
+          <button class="dialog-close-btn" type="button" aria-label="Close" data-dialog-close>✕</button>
+        </div>
         <p data-task-delete-message>Are you sure you want to delete this task?</p>
         <div class="dialog-actions">
           <button class="btn-secondary" type="button" data-task-delete-cancel>Cancel</button>
@@ -2290,7 +2293,6 @@ async function bootstrap() {
 
   const checklistDialog = document.querySelector("[data-checklist-dialog]");
   const checklistDialogTitle = checklistDialog?.querySelector("[data-checklist-dialog-title]");
-  const checklistDialogClose = checklistDialog?.querySelector("[data-checklist-dialog-close]");
   const checklistDialogRoot = checklistDialog?.querySelector("[data-task-checklist]");
   const checklistManager = checklistDialogRoot
     ? createChecklistManager({
@@ -2333,6 +2335,19 @@ async function bootstrap() {
 
     taskReactionChannel = subscribeToCommentReactions(taskComments);
   };
+
+  // Generic X-button close — routes to the dialog's existing cancel/close button
+  document.addEventListener("click", (event) => {
+    const xBtn = event.target.closest("[data-dialog-close]");
+    if (!xBtn) return;
+    const dlg = xBtn.closest("dialog");
+    if (!dlg) return;
+    const cancelBtn = dlg.querySelector(
+      "[data-task-editor-cancel], [data-task-delete-cancel]"
+    );
+    if (cancelBtn) cancelBtn.click();
+    else dlg.close();
+  });
 
   if (!stageList.length && createButton) {
     createButton.disabled = true;
@@ -2898,10 +2913,6 @@ async function bootstrap() {
     }
     checklistDialog?.showModal();
   });
-
-  if (checklistDialogClose) {
-    checklistDialogClose.addEventListener("click", () => checklistDialog?.close());
-  }
 
   if (checklistDialog) {
     checklistDialog.addEventListener("close", () => {

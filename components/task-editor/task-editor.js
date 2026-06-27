@@ -29,7 +29,10 @@ export function renderTaskEditorDialog({
   return `
     <dialog class="task-dialog${mode === "edit" ? " task-dialog--edit" : ""}" ${dialogAttr || ""}>
       <form class="dialog-body" data-task-editor-form ${formAttr || ""} method="dialog">
-        <h2>${escapeHtml(title || "Task")}</h2>
+        <div class="dialog-title-row">
+          <h2>${escapeHtml(title || "Task")}</h2>
+          <button class="dialog-close-btn" type="button" aria-label="Close" data-dialog-close>✕</button>
+        </div>
         <div class="field">
           <label for="${prefix}-title">Title</label>
           <input

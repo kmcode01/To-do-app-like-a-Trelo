@@ -121,6 +121,40 @@ h3 {
   width: min(720px, 96vw);
 }
 
+/* Dialog title row with close button */
+.dialog-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.dialog-title-row h2 {
+  margin: 0;
+}
+
+.dialog-close-btn {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.dialog-close-btn:hover {
+  background: #eef5f2;
+  color: var(--text);
+}
+
 /* Collapsible comment thread */
 .comment-thread-body {
   display: grid;
@@ -277,4 +311,18 @@ h3 {
 @keyframes toast-out {
   from { opacity: 1; transform: translateX(0); }
   to   { opacity: 0; transform: translateX(12px); }
+}
+
+@media (max-width: 640px) {
+  #toast-container {
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+    max-width: none;
+  }
+
+  .toast-close {
+    padding: 0.4rem 0.5rem;
+    font-size: 1.1rem;
+  }
 }

@@ -740,6 +740,7 @@
   padding: 0.15rem;
   border-radius: 0.6rem;
   align-items: center;
+  width: fit-content;
 }
 
 .segmented input[type="radio"] {
@@ -767,9 +768,54 @@
   }
 }
 
+@media (max-width: 768px) {
+
+  .task-dialog {
+    width: 96vw;
+  }
+
+  .task-dialog.task-dialog--edit {
+    width: 96vw;
+  }
+
+  .dialog-body {
+    padding: 0.75rem;
+  }
+
+  .dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .dialog-actions .btn-primary,
+  .dialog-actions .btn-secondary,
+  .dialog-actions .btn-danger {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .taskboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .taskboard-header .form-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 640px) {
   .taskboard-grid {
     grid-template-columns: 1fr;
+  }
+
+  .task-actions {
+    justify-content: stretch;
+  }
+
+  .task-action-btn {
+    flex: 1;
+    text-align: center;
   }
 }
 
@@ -874,4 +920,10 @@
   background: #e8f5ee;
   color: #0a654c;
   border-color: #bfe0d0;
+}
+
+@media (max-width: 768px) {
+  .task-timing-grid {
+    grid-template-columns: 1fr;
+  }
 }
