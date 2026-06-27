@@ -1,6 +1,6 @@
 import template from "./header.html?raw";
 import "./header.css";
-import { getCurrentSession, supabase } from "../../pages/lib/supabaseClient.js";
+import { getCurrentSession, supabase } from "../../lib/supabaseClient.js";
 
 export function renderHeader(target, activeRoute = "/") {
   if (!target) {

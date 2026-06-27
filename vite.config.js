@@ -8,28 +8,28 @@ function routeAliasPlugin() {
     "/index.html",
     "/dashboard",
     "/dashboard/",
-    "/dashboard/index.html",
+    "/pages/dashboard/index.html",
     "/login",
     "/login/",
-    "/login/index.html",
+    "/pages/login/index.html",
     "/register",
     "/register/",
-    "/register/index.html",
+    "/pages/register/index.html",
     "/projects",
     "/projects/",
-    "/projects/index.html",
+    "/pages/projects/index.html",
     "/projects/add",
     "/projects/add/",
-    "/projects/add/index.html",
+    "/pages/projects/add/index.html",
     "/projects/edit",
     "/projects/edit/",
-    "/projects/edit/index.html",
+    "/pages/projects/edit/index.html",
     "/projects/view",
     "/projects/view/",
-    "/projects/view/index.html",
+    "/pages/projects/view/index.html",
     "/projects/taskboard",
     "/projects/taskboard/",
-    "/projects/taskboard/index.html",
+    "/pages/projects/taskboard/index.html",
     "/404",
     "/404.html"
   ]);
@@ -84,42 +84,42 @@ function routeAliasPlugin() {
     const [pathname, search = ""] = url.split("?");
 
     if (pathname === "/dashboard") {
-      return { url: "/dashboard/index.html", statusCode: null };
+      return { url: "/pages/dashboard/index.html", statusCode: null };
     }
 
     if (pathname === "/login") {
-      return { url: "/login/index.html", statusCode: null };
+      return { url: "/pages/login/index.html", statusCode: null };
     }
 
     if (pathname === "/register") {
-      return { url: "/register/index.html", statusCode: null };
+      return { url: "/pages/register/index.html", statusCode: null };
     }
 
     if (pathname === "/projects") {
-      return { url: "/projects/index.html", statusCode: null };
+      return { url: "/pages/projects/index.html", statusCode: null };
     }
 
     if (pathname === "/projects/add") {
-      return { url: "/projects/add/index.html", statusCode: null };
+      return { url: "/pages/projects/add/index.html", statusCode: null };
     }
 
     if (pathname === "/projects/edit") {
-      return { url: "/projects/edit/index.html", statusCode: null };
+      return { url: "/pages/projects/edit/index.html", statusCode: null };
     }
 
     if (pathname === "/projects/view") {
-      return { url: "/projects/view/index.html", statusCode: null };
+      return { url: "/pages/projects/view/index.html", statusCode: null };
     }
 
     if (pathname === "/projects/taskboard") {
-      return { url: "/projects/taskboard/index.html", statusCode: null };
+      return { url: "/pages/projects/taskboard/index.html", statusCode: null };
     }
 
     const projectId = getProjectViewId(pathname);
     if (projectId) {
       const querySuffix = search ? `&${search}` : "";
       return {
-        url: `/projects/view/index.html?id=${encodeURIComponent(projectId)}${querySuffix}`,
+        url: `/pages/projects/view/index.html?id=${encodeURIComponent(projectId)}${querySuffix}`,
         statusCode: null
       };
     }
@@ -128,7 +128,7 @@ function routeAliasPlugin() {
     if (projectEditId) {
       const querySuffix = search ? `&${search}` : "";
       return {
-        url: `/projects/edit/index.html?id=${encodeURIComponent(projectEditId)}${querySuffix}`,
+        url: `/pages/projects/edit/index.html?id=${encodeURIComponent(projectEditId)}${querySuffix}`,
         statusCode: null
       };
     }
@@ -137,7 +137,7 @@ function routeAliasPlugin() {
     if (projectTaskboardId) {
       const querySuffix = search ? `&${search}` : "";
       return {
-        url: `/projects/taskboard/index.html?id=${encodeURIComponent(projectTaskboardId)}${querySuffix}`,
+        url: `/pages/projects/taskboard/index.html?id=${encodeURIComponent(projectTaskboardId)}${querySuffix}`,
         statusCode: null
       };
     }
@@ -241,14 +241,14 @@ export default defineConfig({
       input: {
         home: resolve(__dirname, "index.html"),
         notFound: resolve(__dirname, "404.html"),
-        dashboard: resolve(__dirname, "dashboard/index.html"),
-        login: resolve(__dirname, "login/index.html"),
-        register: resolve(__dirname, "register/index.html"),
-        projects: resolve(__dirname, "projects/index.html"),
-        projectsAdd: resolve(__dirname, "projects/add/index.html"),
-        projectsEdit: resolve(__dirname, "projects/edit/index.html"),
-        projectsView: resolve(__dirname, "projects/view/index.html"),
-        projectsTaskboard: resolve(__dirname, "projects/taskboard/index.html")
+        dashboard: resolve(__dirname, "pages/dashboard/index.html"),
+        login: resolve(__dirname, "pages/login/index.html"),
+        register: resolve(__dirname, "pages/register/index.html"),
+        projects: resolve(__dirname, "pages/projects/index.html"),
+        projectsAdd: resolve(__dirname, "pages/projects/add/index.html"),
+        projectsEdit: resolve(__dirname, "pages/projects/edit/index.html"),
+        projectsView: resolve(__dirname, "pages/projects/view/index.html"),
+        projectsTaskboard: resolve(__dirname, "pages/projects/taskboard/index.html")
       }
     }
   }

@@ -1,8 +1,8 @@
 import { renderFooter } from "../../components/footer/footer.js";
 import { renderHeader } from "../../components/header/header.js";
-import { getSupabaseConfigError, redirectIfAuthenticated, supabase } from "../lib/supabaseClient.js";
-import "../theme.css";
-import "../auth/auth.css";
+import { getSupabaseConfigError, redirectIfAuthenticated, supabase } from "../../lib/supabaseClient.js";
+import "../../styles/theme.css";
+import "../../styles/auth.css";
 
 document.title = "TaskFlow | Login";
 

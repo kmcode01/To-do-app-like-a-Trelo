@@ -1,9 +1,9 @@
 import { renderFooter } from "../../../components/footer/footer.js";
 import { renderHeader } from "../../../components/header/header.js";
 import { createTaskEditor, renderTaskEditorDialog } from "../../../components/task-editor/task-editor.js";
-import { requireAuthenticatedSession, supabase } from "../../lib/supabaseClient.js";
-import { showToast } from "../../lib/toast.js";
-import "../../theme.css";
+import { requireAuthenticatedSession, supabase } from "../../../lib/supabaseClient.js";
+import { showToast } from "../../../lib/toast.js";
+import "../../../styles/theme.css";
 import "../shared.css";
 import "./index.css";
 

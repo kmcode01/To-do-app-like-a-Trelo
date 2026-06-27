@@ -1,7 +1,7 @@
 import { renderFooter } from "../../components/footer/footer.js";
 import { renderHeader } from "../../components/header/header.js";
-import { getCurrentSession, supabase } from "../lib/supabaseClient.js";
-import "../theme.css";
+import { getCurrentSession, supabase } from "../../lib/supabaseClient.js";
+import "../../styles/theme.css";
 import "./index.css";
 
 document.title = "TaskFlow | Home";
