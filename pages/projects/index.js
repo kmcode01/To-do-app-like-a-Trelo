@@ -92,6 +92,13 @@ function renderPage(projects, showCreatedNotice, rolesByProject, currentUserId) 
       <main class="page-content">
         <div class="page-head">
           <h1>Projects</h1>
+          <input
+            type="search"
+            class="board-search-input"
+            placeholder="Search projects…"
+            aria-label="Search projects"
+            data-projects-search
+          />
           <a class="icon-link" href="/projects/add" aria-label="Create Project" title="Create Project">
             ${iconSvg("M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z")}
           </a>
@@ -128,6 +135,34 @@ function renderPage(projects, showCreatedNotice, rolesByProject, currentUserId) 
 
   renderHeader(document.querySelector("[data-header]"), "/projects");
   renderFooter(document.querySelector("[data-footer]"));
+}
+
+function filterProjects(query) {
+  const normalized = query.trim().toLowerCase();
+  let hasVisible = false;
+
+  document.querySelectorAll("[data-project-card]").forEach((card) => {
+    if (!normalized) {
+      card.style.display = "";
+      hasVisible = true;
+      return;
+    }
+    const title = (card.querySelector("h2")?.textContent || "").toLowerCase();
+    const desc = (card.querySelector(".project-description")?.textContent || "").toLowerCase();
+    const match = title.includes(normalized) || desc.includes(normalized);
+    card.style.display = match ? "" : "none";
+    if (match) hasVisible = true;
+  });
+
+  const grid = document.querySelector(".projects-grid");
+  const existing = document.querySelector(".search-empty-state");
+  if (!hasVisible && normalized && grid) {
+    if (!existing) {
+      grid.insertAdjacentHTML("afterend", '<p class="search-empty-state empty-state">No matching projects.</p>');
+    }
+  } else if (existing) {
+    existing.remove();
+  }
 }
 
 async function bootstrap() {
@@ -171,6 +206,11 @@ async function bootstrap() {
   const safeProjects = projects ?? [];
   const currentUserId = userId;
   renderPage(safeProjects, showCreatedNotice, rolesByProject, currentUserId);
+
+  const projectsSearchInput = document.querySelector("[data-projects-search]");
+  if (projectsSearchInput) {
+    projectsSearchInput.addEventListener("input", () => filterProjects(projectsSearchInput.value));
+  }
 
   if (showCreatedNotice) {
     params.delete("created");

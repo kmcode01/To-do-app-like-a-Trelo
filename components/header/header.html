@@ -1,6 +1,24 @@
 <header class="app-header">
   <div class="header-inner">
-    <a class="brand" href="/">TaskFlow</a>
+    <a class="brand" href="/">
+      <svg class="brand-icon" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <clipPath id="brand-clip">
+            <rect width="28" height="28" rx="6"/>
+          </clipPath>
+        </defs>
+        <g clip-path="url(#brand-clip)">
+          <rect width="28" height="28" fill="#0d8a67"/>
+          <rect x="3.5" y="6.5"  width="21" height="3"   rx="1.5" fill="white" fill-opacity="0.9"/>
+          <rect x="3.5" y="12.5" width="21" height="3"   rx="1.5" fill="white" fill-opacity="0.9"/>
+          <rect x="3.5" y="18.5" width="21" height="3"   rx="1.5" fill="white" fill-opacity="0.9"/>
+          <circle cx="21" cy="20.5" r="8"   fill="#0b7558"/>
+          <circle cx="21" cy="20.5" r="6.5" fill="white"/>
+          <path d="M18 20.5 L20.5 23 L24 18" stroke="#0d8a67" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </g>
+      </svg>
+      <span class="brand-name"><span class="brand-task">Task</span><span class="brand-flow">Flow</span></span>
+    </a>
     <nav>
       <ul class="nav-list">
         <li><a data-route="/" href="/">Home</a></li>

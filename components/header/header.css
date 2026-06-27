@@ -14,9 +14,33 @@
 }
 
 .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   text-decoration: none;
-  font-weight: 700;
   color: var(--text);
+}
+
+.brand-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.brand-name {
+  font-family: "Sora", "Manrope", sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.brand-task {
+  color: var(--text);
+}
+
+.brand-flow {
+  color: var(--primary);
 }
 
 .nav-list {

@@ -2276,6 +2276,12 @@ async function bootstrap() {
       })
     : null;
 
+  if (createEditor?.fields?.deadlineInput) {
+    createEditor.fields.deadlineInput.addEventListener("change", () => {
+      updateDeadlineHint(createEditor.fields.deadlineInput.value, createEditor.fields.deadlineHint);
+    });
+  }
+
   if (editEditor?.fields?.deadlineInput) {
     editEditor.fields.deadlineInput.addEventListener("change", () => {
       updateDeadlineHint(editEditor.fields.deadlineInput.value, editEditor.fields.deadlineHint);
@@ -2343,6 +2349,13 @@ async function bootstrap() {
     if (createFields?.stageSelect && preselectedStageId) {
       createFields.stageSelect.value = preselectedStageId;
     }
+    if (createFields?.statusOpen) {
+      createFields.statusOpen.checked = true;
+    }
+    if (createFields?.deadlineHint) {
+      createFields.deadlineHint.textContent = "";
+      createFields.deadlineHint.className = "deadline-hint";
+    }
     dialog.showModal();
   };
 
@@ -2382,6 +2395,10 @@ async function bootstrap() {
       const title = String(createFields?.titleInput?.value || "").trim();
       const description = String(createFields?.descriptionInput?.value || "").trim();
       const stageId = String(createFields?.stageSelect?.value || "");
+      const priority = String(createFields?.prioritySelect?.value || "medium");
+      const explicitDone = createFields?.statusClosed?.checked ?? false;
+      const deadlineRaw = createFields?.deadlineInput?.value || "";
+      const deadline = deadlineRaw ? new Date(deadlineRaw).toISOString() : null;
 
       if (!title) {
         if (formMessage) {
@@ -2406,8 +2423,8 @@ async function bootstrap() {
       submitButton.textContent = "Creating...";
 
       const stageInfo = stageMeta.get(stageId);
-      const doneFlag = Boolean(stageInfo?.done);
-      const statusValue = resolveStageStatus(stageInfo?.name);
+      const doneFlag = Boolean(stageInfo?.done) || explicitDone;
+      const statusValue = explicitDone ? "done" : resolveStageStatus(stageInfo?.name);
       const descriptionHtml = description ? `<p>${escapeHtml(description)}</p>` : null;
       const position = targetList.querySelectorAll(".task-card").length;
       const existingPositions = [...targetList.querySelectorAll(".task-card")]
@@ -2428,11 +2445,12 @@ async function bootstrap() {
           position: nextPosition,
           done: doneFlag,
           status: statusValue,
-          priority: "medium",
+          priority,
+          deadline,
           user_id: userId,
           created_by_user_id: userId
         })
-        .select("id, title, description_html, position, stage_id, done, status, priority, created_at")
+        .select("id, title, description_html, position, stage_id, done, status, priority, deadline, created_at")
         .single();
 
       submitButton.disabled = false;

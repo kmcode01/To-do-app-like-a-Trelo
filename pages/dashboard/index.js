@@ -1604,7 +1604,7 @@ function updateColumnCounts() {
       return;
     }
 
-    const count = column.querySelectorAll(".board-card").length;
+    const count = [...column.querySelectorAll(".board-card")].filter((c) => !c.hidden).length;
     badge.textContent = count;
   });
 }
@@ -1730,6 +1730,37 @@ function setupBoardDragAndDrop() {
 }
 
 
+
+function filterBoard(query) {
+  const normalized = query.trim().toLowerCase();
+  document.querySelectorAll(".board-card").forEach((card) => {
+    if (!normalized) {
+      card.hidden = false;
+      return;
+    }
+    const title = (card.querySelector("[data-task-title]")?.textContent || "").toLowerCase();
+    const desc = (card.querySelector("[data-task-description]")?.textContent || "").toLowerCase();
+    const project = (card.querySelectorAll(".meta-text")[0]?.textContent || "").toLowerCase();
+    const priority = (card.querySelector("[data-task-priority]")?.textContent || "").toLowerCase();
+    card.hidden = !(title.includes(normalized) || desc.includes(normalized) || project.includes(normalized) || priority.includes(normalized));
+  });
+
+  document.querySelectorAll(".board-column").forEach((column) => {
+    const list = column.querySelector(".board-card-list");
+    if (!list) return;
+    const hasVisible = [...list.querySelectorAll(".board-card")].some((c) => !c.hidden);
+    const existing = list.querySelector(".search-empty");
+    if (!hasVisible && normalized) {
+      if (!existing) {
+        list.insertAdjacentHTML("beforeend", '<li class="search-empty empty-projects">No matching tasks.</li>');
+      }
+    } else if (existing) {
+      existing.remove();
+    }
+  });
+
+  updateColumnCounts();
+}
 
 async function bootstrap() {
   app.innerHTML = `
@@ -1906,6 +1937,13 @@ async function bootstrap() {
         <section class="projects-section" aria-label="Tasks board">
           <div class="projects-heading-row">
             <h2>Your tasks</h2>
+            <input
+              type="search"
+              class="board-search-input"
+              placeholder="Search tasks…"
+              aria-label="Search tasks"
+              data-board-search
+            />
             <a class="secondary-link" href="/projects">Projects</a>
           </div>
           <div class="board-grid" role="list">
@@ -1999,6 +2037,11 @@ async function bootstrap() {
   renderFooter(document.querySelector("[data-footer]"));
 
   setupBoardDragAndDrop();
+
+  const boardSearchInput = document.querySelector("[data-board-search]");
+  if (boardSearchInput) {
+    boardSearchInput.addEventListener("input", () => filterBoard(boardSearchInput.value));
+  }
 
   // ── Card timers ──────────────────────────────────────────────────────────
   const taskTimers = new Map();

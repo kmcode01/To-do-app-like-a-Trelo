@@ -23,8 +23,7 @@ export function renderTaskEditorDialog({
 } = {}) {
   const prefix = mode === "edit" ? "edit-task" : "task";
   const showStage = mode === "create";
-  const showPriority = mode === "edit";
-  const showStatus = mode === "edit";
+  const showTimer = mode === "edit";
   const showComments = mode === "edit";
 
   return `
@@ -51,22 +50,14 @@ export function renderTaskEditorDialog({
             data-task-editor-description
           ></textarea>
         </div>
-        ${
-          showPriority
-            ? `
         <div class="field">
           <label for="${prefix}-priority">Priority</label>
           <select id="${prefix}-priority" name="priority" required data-task-editor-priority>
             <option value="low">low</option>
-            <option value="medium">medium</option>
+            <option value="medium" selected>medium</option>
             <option value="high">high</option>
           </select>
-        </div>`
-            : ""
-        }
-        ${
-          showStatus
-            ? `
+        </div>
         <div class="field">
           <label>Status</label>
           <div class="segmented" role="tablist">
@@ -76,6 +67,7 @@ export function renderTaskEditorDialog({
               name="${prefix}-status"
               value="open"
               data-task-editor-status-open
+              checked
             >
             <label for="${prefix}-status-open">Open</label>
             <input
@@ -87,11 +79,9 @@ export function renderTaskEditorDialog({
             >
             <label for="${prefix}-status-closed">Closed</label>
           </div>
-        </div>`
-            : ""
-        }
+        </div>
         ${
-          showStatus
+          showTimer
             ? `
         <div class="task-timing-grid">
           <div class="timer-panel" data-task-timer>
@@ -113,7 +103,17 @@ export function renderTaskEditorDialog({
             <p class="deadline-hint" data-task-editor-deadline-hint></p>
           </div>
         </div>`
-            : ""
+            : `
+        <div class="deadline-panel">
+          <div class="deadline-label">Deadline</div>
+          <input
+            type="date"
+            id="${prefix}-deadline"
+            class="deadline-input"
+            data-task-editor-deadline
+          />
+          <p class="deadline-hint" data-task-editor-deadline-hint></p>
+        </div>`
         }
         ${
           showStage
